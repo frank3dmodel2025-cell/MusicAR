@@ -1,815 +1,780 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Mobile Web AR</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Visor AR con Placement Dot — Galería</title>
 
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
-            "three/examples/jsm/loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js",
-            "three/examples/jsm/controls/DeviceOrientationControls.js": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/DeviceOrientationControls.js"
-        }
-    }
-    </script>
+    <!-- Tailwind y Three.js -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/DeviceOrientationControls.js"></script>
 
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
-        /* CSS Variables for Theming (Light/Dark Mode) */
-        :root {
-            --bg-color: #ffffff;
-            --text-color: #1a1a1a;
-            --panel-bg: rgba(255, 255, 255, 0.8);
-            --button-bg: #007aff;
-            --button-text: #ffffff;
-            --reticle-color: #ffffff;
-            --shadow-color: rgba(0, 0, 0, 0.5);
-        }
-
-        [data-theme="dark"] {
-            --bg-color: #1a1a1a;
-            --text-color: #f0f0f0;
-            --panel-bg: rgba(0, 0, 0, 0.7);
-            --button-bg: #0a84ff;
-            --button-text: #ffffff;
-            --reticle-color: #ffffff;
-            --shadow-color: rgba(0, 0, 0, 0.6);
-        }
-
-        /* Basic Setup */
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden; /* Critical for full-screen */
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-        }
-
-        /* 1. Camera Passthrough (Video) */
-        #camera-feed {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover; /* Ensures full-screen, correct aspect ratio */
-            z-index: -2;
-            display: none; /* Hidden until AR mode is on */
-        }
-
-        /* WebGL Canvas (transparent) */
-        #webgl-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            background-color: transparent;
-        }
-
-        /* 6. UI: Permission Overlay (Especially for iOS) */
-        #permission-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: var(--panel-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        #permission-overlay h2 {
-            font-size: 1.5rem;
-            margin-bottom: 10px;
-        }
-        #permission-overlay p {
-            font-size: 1rem;
-            margin-bottom: 20px;
-            max-width: 300px;
-        }
-        #permission-button {
-            padding: 12px 24px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            background-color: var(--button-bg);
-            color: var(--button-text);
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        /* 3. AR Placement: Reticle (Dot) */
-        #placement-reticle {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            width: 12px;
-            height: 12px;
-            background-color: var(--reticle-color);
-            border: 2px solid var(--shadow-color);
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 10;
-            transition: transform 0.2s ease, opacity 0.2s ease;
-            animation: pulse 2s infinite ease-in-out;
-        }
-
-        @keyframes pulse {
-            0% { transform: translate(-50%, -50%) scale(0.9); }
-            50% { transform: translate(-50%, -50%) scale(1.1); }
-            100% { transform: translate(-50%, -50%) scale(0.9); }
-        }
-
-        /* 6. UI: Placement Hint */
-        #placement-hint {
-            position: fixed;
-            top: 70%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--panel-bg);
-            backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            z-index: 10;
-            box-shadow: 0 2px 10px var(--shadow-color);
-        }
-
-        /* 6. UI: Main Controls Container */
-        #ui-container {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            z-index: 20;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            padding: 15px;
-            box-sizing: border-box;
-        }
-
-        /* 2. UI: Model Selection */
-        #model-switcher {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            background: var(--panel-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            padding: 10px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px var(--shadow-color);
-        }
-        #model-switcher button {
-            padding: 8px 12px;
-            border: none;
-            background: transparent;
-            color: var(--text-color);
-            font-size: 0.9rem;
-            font-weight: 500;
-            border-radius: 8px;
-            transition: background-color 0.2s;
-        }
-        #model-switcher button.active {
-            background-color: var(--button-bg);
-            color: var(--button-text);
-        }
-
-        /* 6. UI: Sliders Panel */
-        #controls-panel {
-            background: var(--panel-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px var(--shadow-color);
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .slider-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .slider-group label {
-            font-size: 0.8rem;
-            font-weight: 500;
-            width: 60px;
-        }
-        .slider-group input[type="range"] {
-            flex-grow: 1;
-            -webkit-appearance: none;
-            appearance: none;
-            height: 5px;
-            background: var(--shadow-color);
-            border-radius: 5px;
-        }
-        .slider-group input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            background: var(--button-bg);
-            border-radius: 50%;
-            cursor: pointer;
-        }
-        .slider-group input[type="range"]::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            background: var(--button-bg);
-            border-radius: 50%;
-            cursor: pointer;
-        }
-
-        /* 6. UI: Toggle Buttons */
-        #toggle-buttons {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-        }
-        #toggle-buttons button {
-            flex-grow: 1;
-            padding: 10px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            background-color: var(--panel-bg);
-            color: var(--text-color);
-            border: 1px solid var(--shadow-color);
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        /* 6. UI: Notification Toast */
-        #notification-toast {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #222;
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            z-index: 101;
-            opacity: 0;
-            transition: opacity 0.3s ease, top 0.3s ease;
-            pointer-events: none;
-        }
-        #notification-toast.show {
-            opacity: 1;
-            top: 30px;
-        }
-
-        /* Utility class */
-        .hidden {
-            display: none !important;
-        }
-
+      body {
+        font-family: 'Poppins', sans-serif; background-color:#f7f3ed; color:#3b4233; overflow:hidden; touch-action:none;
+      }
+      canvas { display:block; width:100%; height:100vh; position:absolute; top:0; left:0; z-index:10; }
+      video.video-background { position: fixed; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:5; display:none; }
+      .glass-panel { backdrop-filter: blur(10px) saturate(180%); background-color: rgba(255,255,255,0.75); border:1px solid rgba(255,255,255,0.125);
+                     box-shadow:0 8px 32px rgba(31,38,135,0.37); }
+      #control-panel { transition: transform .3s ease-in-out; transform: translateX(100%); }
+      #control-panel.is-visible { transform: translateX(0); }
+      #placement-dot {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 62px;
+        height: 62px;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        z-index: 22;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        pointer-events: auto;
+      }
+      #placement-dot .inner {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.6);
+        border: 2px solid rgba(0,0,0,0.45);
+        box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+      }
+      #placement-dot .pulse {
+        position: absolute; width: 100%; height: 100%; border-radius: 50%;
+        background: radial-gradient(circle, rgba(0,128,0,0.12) 0%, rgba(0,128,0,0.02) 60%, rgba(0,128,0,0) 100%);
+        animation: pulse 1.6s infinite;
+        z-index: 1;
+      }
+      @keyframes pulse {
+        0% { transform: scale(.95); opacity:1 }
+        70% { transform: scale(1.4); opacity:0 }
+        100% { opacity:0 }
+      }
+      #placement-hint {
+        position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; z-index: 22; background: rgba(0,0,0,0.55);
+        color: #fff; padding: 8px 12px; border-radius: 8px; display: none; font-size: 13px;
+      }
+      #menu-icon { z-index: 24; }
+      /* Botón para permiso sensores iOS */
+      #request-permission-overlay {
+        position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); z-index: 1000; display: flex;
+        align-items: center; justify-content: center; flex-direction: column; color: white;
+        font-family: 'Poppins', sans-serif; padding: 1rem;
+      }
+      #request-permission-btn {
+        padding: 1rem 2rem; font-size: 1.25rem; background: #2563eb; border-radius: 0.5rem; cursor: pointer;
+        border: none; color: white; margin-top: 1rem; transition: background-color 0.3s ease;
+      }
+      #request-permission-btn:hover {
+        background: #1d4ed8;
+      }
     </style>
 </head>
-<body>
+<body class="bg-gray-100 antialiased">
 
-    <video id="camera-feed" playsinline autoplay muted></video>
+  <!-- Overlay permiso sensores iOS -->
+  <div id="request-permission-overlay" style="display:none;">
+    <div>Para activar la realidad aumentada, necesitas otorgar permiso a los sensores del dispositivo.</div>
+    <button id="request-permission-btn">Permitir sensores</button>
+  </div>
 
-    <canvas id="webgl-canvas"></canvas>
+  <!-- Video passthrough -->
+  <video id="video-feed" class="video-background" autoplay playsinline></video>
 
-    <div id="permission-overlay">
-        <h2>Welcome to Web AR</h2>
-        <p>This experience requires access to your device's camera and motion sensors.</p>
-        <button id="permission-button">Enable AR</button>
+  <!-- 3D container -->
+  <div id="three-container"></div>
+
+  <!-- Placement dot (overlay) -->
+  <div id="placement-dot" role="button" aria-label="Point to place model" tabindex="0">
+    <div class="pulse"></div>
+    <div class="inner"></div>
+  </div>
+  <div id="placement-hint">Mueve el punto. Doble tap para colocar.</div>
+
+  <!-- Control panel -->
+  <button id="menu-icon" class="fixed top-4 right-4 p-3 bg-indigo-600 text-white rounded-full shadow-lg transition-transform hover:scale-105" onclick="toggleControlPanel()">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+  </button>
+
+  <div id="control-panel" class="fixed top-0 right-0 h-full w-full md:w-80 z-50 p-6 glass-panel overflow-y-auto">
+    <button id="close-icon" class="absolute top-4 right-4 p-2 text-gray-600 rounded-full hover:bg-gray-200" onclick="toggleControlPanel()">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+    </button>
+
+    <h2 class="text-2xl font-bold mb-6 text-indigo-800 pt-8 md:pt-0">Controles de Visor 3D</h2>
+
+    <div class="mb-4">
+        <h3 class="font-semibold mb-2">Modelo Actual: <span id="current-model" class="text-indigo-600">Duck</span></h3>
+        <button class="px-4 py-2 rounded bg-gray-200 w-full" onclick="toggleModelSelector(true)">Cambiar Modelo</button>
     </div>
 
-    <div id="placement-reticle" class="hidden"></div>
+    <div class="mb-4">
+        <h3 class="font-semibold mb-2">Modo Interacción</h3>
+        <p class="text-sm text-gray-600 mb-2">Actual: <span id="lock-status" class="font-medium text-gray-900">OFF (Rotar)</span></p>
+        <button class="px-4 py-2 rounded bg-indigo-600 text-white w-full" onclick="toggleInteractionMode()">Alternar (Rotar/Mover)</button>
+    </div>
+
+    <!-- NUEVO BOTÓN DE CAPTURA DE PANTALLA -->
+    <div class="mb-6 border-t pt-4 border-gray-300">
+        <h3 class="font-semibold mb-2">Captura de Pantalla</h3>
+        <button class="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white w-full" onclick="takeScreenshot()">Guardar Imagen</button>
+        <p class="text-xs mt-1 text-gray-500">Guarda una imagen .png de la vista actual.</p>
+    </div>
+    <!-- FIN DE NUEVO BOTÓN -->
+
+    <div class="mb-6 border-t pt-4 border-gray-300">
+        <h3 class="font-bold text-lg mb-3 text-red-600">MODO PARED (AR Simulado)</h3>
+        <p class="text-sm text-gray-600 mb-2">Estado: <span id="ar-mode-status" class="font-medium text-gray-900">Inactivo</span></p>
+        <button id="toggle-ar-mode-btn" class="px-4 py-2 rounded bg-red-500 text-white w-full" onclick="toggleARMode()">Activar Cámara y AR</button>
+        <button id="reubic-btn" class="mt-3 px-4 py-2 rounded bg-yellow-400 text-black w-full" onclick="startRelocate()" style="display:none;">Reubicar modelo</button>
+        <button id="reset-scale-btn" class="mt-2 px-4 py-2 rounded bg-gray-200 text-black w-full" onclick="resetScale()" style="display:none;">Reiniciar escala</button>
+    </div>
+
+    <div id="placement-controls" class="space-y-4 pt-4 border-t border-gray-300 hidden">
+        <h3 class="font-semibold text-gray-800">Ajuste de Posición Fina</h3>
+        <div class="pt-2">
+            <h4 class="font-medium text-sm mb-1">Rastreo de Movimiento:</h4>
+            <button id="toggle-motion-btn" class="px-4 py-2 rounded bg-green-500 text-white w-full" onclick="toggleMotionTracking(true)">Activar Rastreo de Rotación</button>
+            <p class="text-xs mt-1 text-gray-500">Mantiene el modelo fijo en la pared al mover el teléfono.</p>
+        </div>
+
+        <div>
+            <label for="ar-x-slider" class="block text-sm font-medium text-gray-700">Posición Horizontal (X): <span id="ar-x-value">0.0</span></label>
+            <input type="range" id="ar-x-slider" min="-5" max="5" value="0" step="0.1" class="w-full" oninput="updateModelPlacement()" />
+        </div>
+        <div>
+            <label for="ar-y-slider" class="block text-sm font-medium text-gray-700">Posición Vertical (Y): <span id="ar-y-value">0.0</span></label>
+            <input type="range" id="ar-y-slider" min="-5" max="5" value="0" step="0.1" class="w-full" oninput="updateModelPlacement()" />
+        </div>
+        <div>
+            <label for="ar-z-slider" class="block text-sm font-medium text-gray-700">Rotación (Z): <span id="ar-z-value">0.0</span>°</label>
+            <input type="range" id="ar-z-slider" min="-180" max="180" value="0" step="1" class="w-full" oninput="updateModelPlacement()" />
+        </div>
+        <div class="pt-4 border-t border-gray-300">
+            <h4 class="font-semibold text-gray-800 mb-2">Escala</h4>
+            <div class="flex space-x-2">
+                <button class="px-4 py-2 rounded bg-gray-200 flex-1" onclick="adjustScale(-0.1)">Reducir</button>
+                <button class="px-4 py-2 rounded bg-gray-200 flex-1" onclick="adjustScale(0.1)">Aumentar</button>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <!-- Model selector modal -->
+  <div id="model-selector-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+    <div class="bg-white rounded-xl p-8 shadow-2xl w-full max-w-sm">
+        <h3 class="text-xl font-bold mb-4">Seleccionar Modelo GLTF</h3>
+        <div class="space-y-3">
+            <button class="px-4 py-2 rounded bg-gray-200 w-full" onclick="selectModel('Duck')">Duck</button>
+            <button class="px-4 py-2 rounded bg-gray-200 w-full" onclick="selectModel('Helmet')">Helmet</button>
+            <button class="px-4 py-2 rounded bg-gray-200 w-full" onclick="selectModel('BoomBox')">BoomBox</button>
+        </div>
+        <button class="mt-6 px-4 py-2 rounded bg-indigo-600 text-white w-full" onclick="toggleModelSelector(false)">Cerrar</button>
+    </div>
+  </div>
+
+  <!-- alert -->
+  <div id="custom-alert" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-xl text-white bg-indigo-600 opacity-0 pointer-events-none transition-opacity duration-300">
+      <span id="alert-message"></span>
+  </div>
+
+<script type="module">
+
+let scene, camera, renderer, controls, gltfLoader;
+let modelContainer = null, currentModel = null;
+let deviceOrientationControls;
+let isARMode = false, isMotionTrackingActive = false;
+
+const videoElement = document.getElementById('video-feed');
+
+const MODELS = {
+  Duck: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF/Duck.gltf',
+  Helmet: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
+  BoomBox: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/BoomBox/glTF/BoomBox.gltf'
+};
+
+const placementDot = document.getElementById('placement-dot');
+const placementHint = document.getElementById('placement-hint');
+const reubicBtn = document.getElementById('reubic-btn');
+const resetScaleBtn = document.getElementById('reset-scale-btn');
+
+let lastTapTime = 0;
+let placedOnce = false;
+
+// Estado para pinch scaling
+let pinchState = { active: false, lastDist: 0 };
+
+// Offset para rotación manual + sensores
+let yawOffset = 0;
+let pitchOffset = 0;
+let rollOffset = 0;
+
+// Overlay permisos sensores iOS
+const permissionOverlay = document.getElementById('request-permission-overlay');
+const permissionButton = document.getElementById('request-permission-btn');
+
+permissionButton.addEventListener('click', async () => {
+  // Pedir permisos iOS
+  if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+    try {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if(res === 'granted'){
+        permissionOverlay.style.display = 'none';
+        enableMotionTracking();
+      } else {
+        alert('Permiso denegado para sensores.');
+      }
+    } catch (e){
+      alert('Error solicitando permisos.');
+    }
+  } else {
+    // permiso no requerido (Android o desktop)
+    permissionOverlay.style.display = 'none';
+    enableMotionTracking();
+  }
+});
+
+function initThree(){
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 0, 0);
+  camera.updateProjectionMatrix();
+
+  // MODIFICACIÓN: Añadir preserveDrawingBuffer: true
+  renderer = new THREE.WebGLRenderer({ 
+    antialias: true, 
+    alpha: true, 
+    preserveDrawingBuffer: true 
+  });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x3b4233, 1);
+  document.getElementById('three-container').appendChild(renderer.domElement);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 1.5);
+  scene.add(ambient);
+  const dir = new THREE.DirectionalLight(0xffffff, 1);
+  dir.position.set(5, 5, 5);
+  scene.add(dir);
+
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.target.set(0, 0, -2);
+  controls.update();
+
+  modelContainer = new THREE.Group();
+  scene.add(modelContainer);
+
+  gltfLoader = new THREE.GLTFLoader();
+
+  deviceOrientationControls = new THREE.DeviceOrientationControls(camera);
+  deviceOrientationControls.enabled = false;
+
+  window.addEventListener('resize', onWindowResize);
+
+  renderer.domElement.addEventListener('touchstart', onTouchStart, { passive:false });
+  renderer.domElement.addEventListener('touchmove', onTouchMove, { passive:false });
+  renderer.domElement.addEventListener('touchend', onTouchEnd, { passive:false });
+}
+
+function loadModelByName(name){
+  document.getElementById('current-model').textContent = name;
+  if(currentModel){
+    modelContainer.remove(currentModel);
+    disposeModel(currentModel);
+    currentModel = null;
+  }
+  showAlert(`Cargando ${name}...`);
+  gltfLoader.load(MODELS[name], (gltf) => {
+    currentModel = gltf.scene;
+    const box = new THREE.Box3().setFromObject(currentModel);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    currentModel.position.sub(center);
+    const scaleFactor = 1.5 / Math.max(size.x, size.y, size.z);
+    currentModel.scale.setScalar(scaleFactor);
+    modelContainer.add(currentModel);
+    addContactShadow(currentModel, size.y);
+    showAlert(`${name} cargado.`);
+    if(placedOnce){
+      currentModel.visible = true;
+    } else {
+      currentModel.visible = false;
+    }
+  }, undefined, (err) => {
+    console.error('Error cargando GLTF', err);
+    showAlert('Error cargando modelo.');
+  });
+}
+
+function disposeModel(obj){
+  obj.traverse(o => {
+    if(o.isMesh){
+      if(o.geometry) o.geometry.dispose();
+      if(o.material){
+        if(Array.isArray(o.material)){
+          o.material.forEach(m => m.dispose());
+        } else m.dispose();
+      }
+    }
+  });
+}
+
+function addContactShadow(model, modelHeight){
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+  g.addColorStop(0, 'rgba(0,0,0,0.6)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent:true, depthWrite:false })
+  );
+  sprite.name = 'contactShadow';
+  sprite.position.set(0, -(modelHeight / 2 || 0.5), 0);
+  sprite.scale.set(1.6, 1.6, 1);
+  model.add(sprite);
+}
+
+function onWindowResize(){
+  if(!camera || !renderer) return;
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  if (controls && controls.enabled) controls.update();
+  if (isMotionTrackingActive && deviceOrientationControls && deviceOrientationControls.enabled){
+    deviceOrientationControls.update();
+    // Aplicar offset para que gestos y sensores se combinen suavemente
+    camera.rotation.y += yawOffset;
+    camera.rotation.x += pitchOffset;
+    camera.rotation.z += rollOffset;
+  }
+  renderer.render(scene, camera);
+}
+
+function showAlert(msg){
+  const box = document.getElementById('custom-alert');
+  document.getElementById('alert-message').textContent = msg;
+  box.classList.remove('opacity-0','pointer-events-none');
+  box.classList.add('opacity-100','pointer-events-auto');
+  clearTimeout(box._t);
+  box._t = setTimeout(() => {
+    box.classList.remove('opacity-100','pointer-events-auto');
+    box.classList.add('opacity-0','pointer-events-none');
+  }, 2200);
+}
+
+// Funciones para toggle modelo, panel, etc. igual que antes...
+function toggleModelSelector(show){
+  const modal = document.getElementById('model-selector-modal');
+  if(show){
+    modal.classList.remove('pointer-events-none','opacity-0');
+    modal.classList.add('opacity-100');
+  } else {
+    modal.classList.remove('opacity-100');
+    modal.classList.add('pointer-events-none','opacity-0');
+  }
+}
+function selectModel(name){
+  toggleModelSelector(false);
+  loadModelByName(name);
+}
+
+function toggleControlPanel(){
+  const panel = document.getElementById('control-panel');
+  const menuIcon = document.getElementById('menu-icon');
+  const closeIcon = document.getElementById('close-icon');
+  const visible = panel.classList.toggle('is-visible');
+  if(visible){
+    menuIcon.classList.add('hidden');
+    closeIcon.classList.remove('hidden');
+  } else {
+    menuIcon.classList.remove('hidden');
+    closeIcon.classList.add('hidden');
+  }
+}
+
+function toggleInteractionMode(){
+  if(controls.enabled){
+    controls.enabled = false;
+    document.getElementById('lock-status').textContent = 'ON (Mover)';
+    renderer.domElement.addEventListener('pointerdown', onPointerDownForDrag, false);
+    showAlert('Modo Mover activado.');
+  } else {
+    controls.enabled = true;
+    document.getElementById('lock-status').textContent = 'OFF (Rotar)';
+    renderer.domElement.removeEventListener('pointerdown', onPointerDownForDrag, false);
+    showAlert('Modo Rotar activado.');
+  }
+}
+
+// Detección y arrastre del modelo
+let dragObject = null;
+const pointer = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
+
+function onPointerDownForDrag(event){
+  pointer.x = (event.clientX / window.innerWidth)*2 - 1;
+  pointer.y = -(event.clientY / window.innerHeight)*2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  if(!currentModel) return;
+  const intersects = raycaster.intersectObjects(currentModel.children, true);
+  if(intersects.length >0){
+    dragObject = modelContainer;
+    renderer.domElement.addEventListener('pointermove', onPointerMoveForDrag, false);
+    renderer.domElement.addEventListener('pointerup', onPointerUpForDrag, false);
+    showAlert('Arrastrando modelo...');
+  }
+}
+function onPointerMoveForDrag(event){
+  if(!dragObject) return;
+  dragObject.position.x += event.movementX * 0.005;
+  dragObject.position.y -= event.movementY * 0.005;
+  if(!isARMode){
+    document.getElementById('ar-x-slider').value = dragObject.position.x;
+    document.getElementById('ar-y-slider').value = dragObject.position.y;
+    document.getElementById('ar-x-value').textContent = dragObject.position.x.toFixed(1);
+    document.getElementById('ar-y-value').textContent = dragObject.position.y.toFixed(1);
+  }
+}
+function onPointerUpForDrag(){
+  dragObject = null;
+  renderer.domElement.removeEventListener('pointermove', onPointerMoveForDrag, false);
+  renderer.domElement.removeEventListener('pointerup', onPointerUpForDrag, false);
+}
+
+// Actualizar posición del modelo desde sliders
+function updateModelPlacement(){
+  if(!modelContainer) return;
+  const x = parseFloat(document.getElementById('ar-x-slider').value);
+  const y = parseFloat(document.getElementById('ar-y-slider').value);
+  const zRot = parseFloat(document.getElementById('ar-z-slider').value) * Math.PI/180;
+  modelContainer.position.set(x, y, -2);
+  modelContainer.rotation.z = zRot;
+  document.getElementById('ar-x-value').textContent = x.toFixed(1);
+  document.getElementById('ar-y-value').textContent = y.toFixed(1);
+  document.getElementById('ar-z-value').textContent = (zRot * 180/Math.PI).toFixed(0);
+}
+
+function adjustScale(delta){
+  if(!currentModel) return;
+  currentModel.scale.x = Math.max(0.1, currentModel.scale.x + delta);
+  currentModel.scale.y = Math.max(0.1, currentModel.scale.y + delta);
+  currentModel.scale.z = Math.max(0.1, currentModel.scale.z + delta);
+  const shadow = currentModel.getObjectByName('contactShadow');
+  if(shadow) shadow.scale.set(currentModel.scale.x*2, currentModel.scale.x*2,1);
+}
+
+// Colocar modelo en pantalla double tap placement dot
+(function setupPlacementDotEvents(){
+  let dragging = false;
+  let startTouchOffset={x:0,y:0};
+
+  placementDot.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    dragging=true;
+    placementDot.setPointerCapture(e.pointerId);
+    startTouchOffset.x = e.clientX - placementDot.getBoundingClientRect().left;
+    startTouchOffset.y = e.clientY - placementDot.getBoundingClientRect().top;
+  });
+  placementDot.addEventListener('pointermove', (e)=>{
+    if(!dragging) return;
+    e.preventDefault();
+    const nx = e.clientX - startTouchOffset.x + placementDot.offsetWidth/2;
+    const ny = e.clientY - startTouchOffset.y + placementDot.offsetHeight/2;
+    placementDot.style.left = `${Math.max(8, Math.min(window.innerWidth-8,nx))}px`;
+    placementDot.style.top = `${Math.max(8, Math.min(window.innerHeight-8,ny))}px`;
+  });
+  placementDot.addEventListener('pointerup', (e)=>{
+    dragging=false;
+    try { placementDot.releasePointerCapture(e.pointerId); } catch(e) {}
+    handleDotTap(e.clientX, e.clientY);
+  });
+
+  placementDot.addEventListener('touchstart', (e)=>{
+    e.preventDefault();
+    if(e.touches.length === 1){
+      const t = e.touches[0];
+      dragging = true;
+      startTouchOffset.x = t.clientX - placementDot.getBoundingClientRect().left;
+      startTouchOffset.y = t.clientY - placementDot.getBoundingClientRect().top;
+    }
+  }, {passive:false});
+  placementDot.addEventListener('touchmove', (e)=>{
+    if(!dragging) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    const nx = t.clientX - startTouchOffset.x + placementDot.offsetWidth/2;
+    const ny = t.clientY - startTouchOffset.y + placementDot.offsetHeight/2;
+    placementDot.style.left = `${Math.max(8, Math.min(window.innerWidth-8,nx))}px`;
+    placementDot.style.top = `${Math.max(8, Math.min(window.innerHeight-8,ny))}px`;
+  }, {passive:false});
+  placementDot.addEventListener('touchend', (e)=>{
+    dragging=false;
+    const t = (e.changedTouches && e.changedTouches[0]) || {};
+    const x = t.clientX || (placementDot.getBoundingClientRect().left + placementDot.offsetWidth/2);
+    const y = t.clientY || (placementDot.getBoundingClientRect().top + placementDot.offsetHeight/2);
+    handleDotTap(x, y);
+  }, {passive:false});
+
+  function handleDotTap(clientX, clientY){
+    const now = Date.now();
+    const dt = now - lastTapTime;
+    lastTapTime = now;
+    if(dt < 300){
+      placeModelAtScreen(clientX, clientY);
+    } else {
+      placementDot.style.transform = 'translate(-50%,-50%) scale(0.98)';
+      setTimeout(()=> placementDot.style.transform = 'translate(-50%,-50%) scale(1)', 120);
+    }
+  }
+})();
+
+function screenToWorld(x, y, distance=2.0){
+  const ndcX = (x / window.innerWidth)*2 - 1;
+  const ndcY = -(y / window.innerHeight)*2 + 1;
+  const ndcZ = 0.5;
+  const vec = new THREE.Vector3(ndcX, ndcY, ndcZ).unproject(camera);
+  const dir = vec.sub(camera.position).normalize();
+  return camera.position.clone().add(dir.multiplyScalar(distance));
+}
+
+function placeModelAtScreen(x, y){
+  if(!modelContainer) return;
+  const pos = screenToWorld(x, y, 2.0);
+  modelContainer.position.copy(pos);
+  modelContainer.rotation.set(0, 0, 0);
+  if(currentModel) currentModel.visible = true;
+  placedOnce = true;
+  showPlacementDot(false);
+  reubicBtn.style.display = 'block';
+  resetScaleBtn.style.display = 'block';
+  showAlert('Modelo colocado ✅');
+  document.getElementById('ar-x-slider').value = modelContainer.position.x;
+  document.getElementById('ar-y-slider').value = modelContainer.position.y;
+  document.getElementById('ar-x-value').textContent = modelContainer.position.x.toFixed(1);
+  document.getElementById('ar-y-value').textContent = modelContainer.position.y.toFixed(1);
+}
+
+function showPlacementDot(show){
+  placementDot.style.display = show ? 'flex' : 'none';
+  placementHint.style.display = show ? 'block' : 'none';
+  if(show) placementDot.setAttribute('aria-hidden', 'false');
+  else placementDot.setAttribute('aria-hidden', 'true');
+}
+
+/* Pinch handlers para escala (igual que antes) */
+function onTouchStart(e){
+  if(e.touches && e.touches.length === 2){
+    pinchState.active = true;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchState.lastDist = Math.hypot(dx, dy);
+  }
+}
+function onTouchMove(e){
+  if(pinchState.active && e.touches && e.touches.length === 2 && currentModel){
+    e.preventDefault();
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const newDist = Math.hypot(dx, dy);
+    if(pinchState.lastDist > 0){
+      const factor = newDist / pinchState.lastDist;
+      const newScale = Math.max(0.05, Math.min(10, currentModel.scale.x * factor));
+      currentModel.scale.set(newScale,newScale,newScale);
+      const shadow = currentModel.getObjectByName('contactShadow');
+      if(shadow) shadow.scale.set(newScale*2,newScale*2,1);
+    }
+    pinchState.lastDist = newDist;
+  }
+}
+function onTouchEnd(e){
+  if(!e.touches || e.touches.length < 2) pinchState.active = false;
+}
+
+// Control cámara y AR
+async function startCameraPassThrough(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    videoElement.srcObject = stream;
+    videoElement.style.display = 'block';
+    videoElement.play();
+    renderer.setClearColor(0x000000, 0);
+    renderer.domElement.style.zIndex = 10;
+    return true;
+  }catch(err){
+    console.error('Camera error', err);
+    showAlert('No se pudo activar la cámara. Revisa permisos.');
+    return false;
+  }
+}
+function stopCameraPassThrough(){
+  if(videoElement.srcObject){
+    videoElement.srcObject.getTracks().forEach(t => t.stop());
+  }
+  videoElement.srcObject = null;
+  videoElement.style.display = 'none';
+  renderer.setClearColor(0x3b4233, 1);
+  renderer.domElement.style.zIndex = 10;
+}
+
+async function toggleARMode(){
+  isARMode = !isARMode;
+  const statusSpan = document.getElementById('ar-mode-status');
+  const controlsDiv = document.getElementById('placement-controls');
+  const toggleBtn = document.getElementById('toggle-ar-mode-btn');
+
+  if (isARMode) {
+    // Si es iOS, se muestra overlay para pedir permisos
+    if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+      permissionOverlay.style.display = 'flex';
+    } else {
+      const ok = await startCameraPassThrough();
+      if(!ok){ isARMode = false; return; }
+      statusSpan.textContent = 'Activo';
+      controlsDiv.classList.remove('hidden');
+      toggleBtn.textContent = 'Desactivar Cámara y AR';
+      toggleBtn.classList.remove('bg-red-500'); toggleBtn.classList.add('bg-green-600');
+      controls.enabled = false;
+      document.getElementById('lock-status').textContent = 'ON (Mover)';
+      if (!placedOnce){
+        showPlacementDot(true);
+        placementDot.style.left = '50%'; placementDot.style.top = '50%';
+        placementDot.style.display = 'flex';
+        placementHint.style.display = 'block';
+      } else {
+        showPlacementDot(false);
+        placementHint.style.display = 'none';
+        reubicBtn.style.display = 'block';
+        resetScaleBtn.style.display = 'block';
+      }
+      toggleMotionTracking(true);
+    }
+  } else {
+    stopCameraPassThrough();
+    statusSpan.textContent ='Inactivo';
+    controlsDiv.classList.add('hidden');
+    toggleBtn.textContent = 'Activar Cámara y AR';
+    toggleBtn.classList.remove('bg-green-600'); toggleBtn.classList.add('bg-red-500');
+    controls.enabled = true;
+    document.getElementById('lock-status').textContent = 'OFF (Rotar)';
+    showPlacementDot(false);
+    placementHint.style.display = 'none';
+    toggleMotionTracking(false);
+  }
+}
+
+function enableMotionTracking(){
+  if(!isARMode){
+    showAlert('Activa Modo AR primero.');
+    return;
+  }
+  isMotionTrackingActive = true;
+  deviceOrientationControls.enabled = true;
+  deviceOrientationControls.connect();
+  showAlert('Giroscopio activo.');
+}
+
+function disableMotionTracking(){
+  isMotionTrackingActive = false;
+  deviceOrientationControls.enabled = false;
+  try{ deviceOrientationControls.disconnect();} catch(e){}
+  showAlert('Giroscopio desactivado.');
+}
+
+function toggleMotionTracking(forceState){
+  if(typeof forceState === 'boolean'){
+    if(forceState) enableMotionTracking();
+    else disableMotionTracking();
+  } else {
+    if(isMotionTrackingActive) disableMotionTracking();
+    else enableMotionTracking();
+  }
+}
+
+function startRelocate(){
+  if(!isARMode){
+    showAlert('Activa Modo AR para reubicar.');
+    return;
+  }
+  showPlacementDot(true);
+  placementDot.style.left = `${window.innerWidth/2}px`;
+  placementDot.style.top = `${window.innerHeight/2}px`;
+  if(currentModel) currentModel.visible = true;
+  showAlert('Mueve el punto y doble tap para confirmar la nueva posición.');
+}
+
+function resetScale(){
+  if(!currentModel) return;
+  currentModel.scale.setScalar(1);
+  const shadow = currentModel.getObjectByName('contactShadow');
+  if(shadow) shadow.scale.set(2,2,1);
+  showAlert('Escala reiniciada.');
+}
+
+// NUEVA FUNCIÓN PARA CAPTURA DE PANTALLA
+function takeScreenshot() {
+  try {
+    // El 'renderer.domElement' es el canvas
+    const dataURL = renderer.domElement.toDataURL('image/png');
     
-    <div id="placement-hint" class="hidden">Tap to place model</div>
-
-    <div id="ui-container" class="hidden">
-        
-        <div id="model-switcher">
-            <button class="model-btn active" data-model="Astronaut">🧑‍🚀</button>
-            <button class="model-btn" data-model="Horse">🐎</button>
-            <button class="model-btn" data-model="Shishkebab">🍢</button>
-        </div>
-
-        <div id="controls-panel" class="hidden">
-            <div class="slider-group">
-                <label for="scale-slider">Scale</label>
-                <input type="range" id="scale-slider" min="0.1" max="2" step="0.01" value="0.5">
-            </div>
-            <div class="slider-group">
-                <label for="rotate-y-slider">Rotate Y</label>
-                <input type="range" id="rotate-y-slider" min="-180" max="180" step="1" value="0">
-            </div>
-            <div class="slider-group">
-                <label for="position-y-slider">Height</label>
-                <input type="range" id="position-y-slider" min="-1" max="1" step="0.01" value="0">
-            </div>
-        </div>
-
-        <div id="toggle-buttons">
-            <button id="relocate-button">Re-Locate</button>
-            <button id="ar-toggle-button">AR Mode: ON</button>
-            <button id="theme-toggle-button">🌙</button>
-        </div>
-
-    </div>
-
-    <div id="notification-toast"></div>
-
-    <script type="module">
-        // Import necessary Three.js components
-        import * as THREE from 'three';
-        import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-        import { DeviceOrientationControls } from 'three/examples/jsm/controls/DeviceOrientationControls.js';
-
-        // --- SECTION 1: CORE THREE.JS & AR VARIABLES ---
-        
-        let scene, camera, renderer;
-        let videoElement;
-        let deviceControls;
-        let gltfLoader;
-
-        let placedModel = null;
-        let shadowPlane;
-        let placementMode = true;
-        let arMode = true;
-
-        // Store initial placed position for relative adjustments
-        const initialPlacedPosition = new THREE.Vector3();
-        let initialModelScale = 0.5;
-
-        // Touch gesture state
-        let initialPinchDistance = 0;
-        let lastTouchX = 0;
-
-        // Model URLs (from Google's Model-Viewer repo)
-        const MODELS = {
-            'Astronaut': 'https://cdn.gltf.gstop.gcp.core.tools/api/v1/projects/google-model-viewer/models/Astronaut/glTF/Astronaut.gltf',
-            'Horse': 'https://cdn.gltf.gstop.gcp.core.tools/api/v1/projects/google-model-viewer/models/Horse/glTF/Horse.gltf',
-            'Shishkebab': 'https://cdn.gltf.gstop.gcp.core.tools/api/v1/projects/google-model-viewer/models/Shishkebab/glTF/Shishkebab.gltf'
-        };
-        let currentModelName = 'Astronaut';
-
-        // DOM Element references
-        const permissionOverlay = document.getElementById('permission-overlay');
-        const permissionButton = document.getElementById('permission-button');
-        const webglCanvas = document.getElementById('webgl-canvas');
-        const video = document.getElementById('camera-feed');
-        const uiContainer = document.getElementById('ui-container');
-        const reticle = document.getElementById('placement-reticle');
-        const hint = document.getElementById('placement-hint');
-        const controlsPanel = document.getElementById('controls-panel');
-        const relocateButton = document.getElementById('relocate-button');
-        const arToggleButton = document.getElementById('ar-toggle-button');
-        const themeToggleButton = document.getElementById('theme-toggle-button');
-        const modelSwitcher = document.getElementById('model-switcher');
-        const scaleSlider = document.getElementById('scale-slider');
-        const rotateYSlider = document.getElementById('rotate-y-slider');
-        const positionYSlider = document.getElementById('position-y-slider');
-        const notificationToast = document.getElementById('notification-toast');
-
-
-        // --- SECTION 2: INITIALIZATION ---
-
-        function init() {
-            // Set initial theme
-            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                document.documentElement.setAttribute('data-theme', 'dark');
-                themeToggleButton.textContent = '☀️';
-            }
-
-            // --- UI Event Listeners ---
-            permissionButton.addEventListener('click', requestPermissions);
-            relocateButton.addEventListener('click', togglePlacementMode);
-            arToggleButton.addEventListener('click', toggleARMode);
-            themeToggleButton.addEventListener('click', toggleTheme);
-            
-            modelSwitcher.addEventListener('click', (e) => {
-                if (e.target.tagName === 'BUTTON') {
-                    currentModelName = e.target.dataset.model;
-                    modelSwitcher.querySelector('.active').classList.remove('active');
-                    e.target.classList.add('active');
-                    loadModel(currentModelName);
-                    togglePlacementMode(true); // Enter placement mode for new model
-                    showToast(`Loading ${currentModelName}...`);
-                }
-            });
-
-            // Slider Listeners
-            scaleSlider.addEventListener('input', updateModelTransform);
-            rotateYSlider.addEventListener('input', updateModelTransform);
-            positionYSlider.addEventListener('input', updateModelTransform);
-
-            // Gesture Listeners (for pinch/drag)
-            webglCanvas.addEventListener('touchstart', onTouchStart, { passive: false });
-            webglCanvas.addEventListener('touchmove', onTouchMove, { passive: false });
-            webglCanvas.addEventListener('touchend', onTouchEnd);
-            
-            // Placement Listener
-            window.addEventListener('click', onPlaceModel);
-
-            // Resize Listener
-            window.addEventListener('resize', onWindowResize);
-        }
-
-        /**
-         * 6. UI: Handles iOS permission request for motion sensors
-         */
-        async function requestPermissions() {
-            // 1. Request Device Orientation (Motion) permission (for iOS 13+)
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permissionState = await DeviceOrientationEvent.requestPermission();
-                    if (permissionState !== 'granted') {
-                        alert('Motion sensor permission is required for AR.');
-                        return;
-                    }
-                } catch (error) {
-                    console.error('Error requesting motion permission:', error);
-                    alert('Failed to get motion sensor permissions.');
-                    return;
-                }
-            }
-            
-            // 2. Request Camera permission
-            startCamera();
-        }
-
-        /**
-         * 1. Camera Passthrough: Accesses back-facing camera
-         */
-        function startCamera() {
-            navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: 'environment' } // 'environment' = back camera
-            })
-            .then(stream => {
-                video.srcObject = stream;
-                video.style.display = 'block'; // Show video feed
-                video.play();
-
-                // Once video is playing, setup the 3D scene
-                video.onloadedmetadata = () => {
-                    setupThreeScene();
-                    // Show UI
-                    permissionOverlay.classList.add('hidden');
-                    uiContainer.classList.remove('hidden');
-                    reticle.classList.remove('hidden');
-                    hint.classList.remove('hidden');
-                };
-            })
-            .catch(err => {
-                console.error("Error accessing camera: ", err);
-                alert("Could not access the camera. Please ensure permissions are granted.");
-                permissionOverlay.classList.remove('hidden'); // Show overlay again
-            });
-        }
-
-        /**
-         * Sets up the core Three.js scene, camera, renderer, and lights
-         */
-        function setupThreeScene() {
-            // Scene
-            scene = new THREE.Scene();
-
-            // Camera
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 0, 0); // Position at origin
-
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ 
-                canvas: webglCanvas, 
-                alpha: true // Key for transparent background
-            });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.shadowMap.enabled = true; // 5. Enable Shadows
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-            // 5. Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            directionalLight.position.set(5, 10, 7.5);
-            directionalLight.castShadow = true;
-            // Configure shadow map
-            directionalLight.shadow.mapSize.width = 1024;
-            directionalLight.shadow.mapSize.height = 1024;
-            directionalLight.shadow.camera.near = 0.5;
-            directionalLight.shadow.camera.far = 50;
-            scene.add(directionalLight);
-
-            // 5. Shadow Plane (invisible, catches shadows)
-            const shadowPlaneGeo = new THREE.PlaneGeometry(10, 10);
-            const shadowMaterial = new THREE.ShadowMaterial({ opacity: 0.5 });
-            shadowPlane = new THREE.Mesh(shadowPlaneGeo, shadowMaterial);
-            shadowPlane.receiveShadow = true;
-            shadowPlane.rotation.x = -Math.PI / 2; // Lay flat
-            shadowPlane.visible = false; // Hide until model is placed
-            scene.add(shadowPlane);
-
-            // 4. Device Motion Integration
-            deviceControls = new DeviceOrientationControls(camera);
-
-            // Loaders
-            gltfLoader = new GLTFLoader();
-
-            // Load the initial model
-            loadModel(currentModelName);
-
-            // Start animation loop
-            animate();
-        }
-
-        // --- SECTION 3: CORE LOGIC (MODEL LOADING & PLACEMENT) ---
-
-        /**
-         * 2. 3D Model Handling: Loads a GLB/GLTF model
-         */
-        function loadModel(modelName) {
-            if (!MODELS[modelName]) return;
-
-            // Remove old model if it exists
-            if (placedModel) {
-                scene.remove(placedModel);
-                placedModel = null;
-            }
-
-            gltfLoader.load(MODELS[modelName], (gltf) => {
-                placedModel = gltf.scene;
-                
-                // Enable shadows for all meshes in the model
-                placedModel.traverse((node) => {
-                    if (node.isMesh) {
-                        node.castShadow = true;
-                    }
-                });
-
-                placedModel.visible = false; // Hide until placed
-                scene.add(placedModel);
-                
-                // Reset sliders to default
-                resetSliders();
-                updateModelTransform();
-
-                showToast(`${modelName} loaded.`);
-            }, undefined, (error) => {
-                console.error('Error loading model:', error);
-                showToast(`Error loading ${modelName}.`);
-            });
-        }
-
-        /**
-         * 3. AR Placement: Called on tap
-         */
-        function onPlaceModel(event) {
-            // Ignore taps on UI elements
-            if (event.target.closest('#ui-container')) {
-                return;
-            }
-
-            if (placementMode && placedModel) {
-                // Get screen center (where reticle is)
-                const placementVector = new THREE.Vector3(0, 0, -2.5); // 2.5 units in front
-                
-                // Project this local-camera vector into world space
-                placementVector.applyMatrix4(camera.matrixWorld);
-                
-                // Store this as the "base" position
-                initialPlacedPosition.copy(placementVector);
-                
-                // Apply slider offsets
-                updateModelTransform();
-                
-                // Make model and shadow visible
-                placedModel.visible = true;
-                shadowPlane.visible = true;
-
-                // Toggle UI state
-                placementMode = false;
-                reticle.classList.add('hidden');
-                hint.classList.add('hidden');
-                controlsPanel.classList.remove('hidden');
-
-                showToast('Model placed!');
-            }
-        }
-
-        /**
-         * 3. AR Placement: Re-enters placement mode
-         */
-        function togglePlacementMode(force = false) {
-            if (force === true) {
-                placementMode = true;
-            } else {
-                placementMode = !placementMode;
-            }
-
-            if (placementMode) {
-                if (placedModel) placedModel.visible = false;
-                shadowPlane.visible = false;
-                reticle.classList.remove('hidden');
-                hint.classList.remove('hidden');
-                controlsPanel.classList.add('hidden');
-                showToast('Tap to place model.');
-            }
-        }
-
-
-        // --- SECTION 4: ANIMATION & EVENT HANDLERS ---
-
-        /**
-         * Main animation loop
-         */
-        function animate() {
-            requestAnimationFrame(animate);
-
-            // 4. Update camera rotation from device motion
-            if (arMode && deviceControls) {
-                deviceControls.update();
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        /**
-         * 7. Responsive: Handle window resize
-         */
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        /**
-         * 4. Device Motion: Updates model based on slider values
-         */
-        function updateModelTransform() {
-            if (!placedModel) return;
-
-            // Get values from sliders
-            const scale = parseFloat(scaleSlider.value);
-            const rotationY = THREE.MathUtils.degToRad(parseFloat(rotateYSlider.value));
-            const positionY = parseFloat(positionYSlider.value);
-
-            // Apply scale
-            placedModel.scale.set(scale, scale, scale);
-            initialModelScale = scale; // Store for pinch-to-zoom
-
-            // Apply rotation
-            placedModel.rotation.y = rotationY;
-
-            // Apply position (relative to initial placed point)
-            const newPos = initialPlacedPosition.clone();
-            newPos.y += positionY;
-            placedModel.position.copy(newPos);
-
-            // 5. Update shadow plane to be at the base of the model
-            shadowPlane.position.copy(placedModel.position);
-            shadowPlane.position.y = initialPlacedPosition.y - 0.01; // Place just under the base
-            shadowPlane.rotation.x = -Math.PI / 2;
-        }
-
-        /**
-         * 4. Device Motion: Resets sliders to default
-         */
-        function resetSliders() {
-            scaleSlider.value = 0.5;
-            rotateYSlider.value = 0;
-            positionYSlider.value = 0;
-        }
-
-        // --- SECTION 5: TOUCH GESTURES (PINCH & DRAG) ---
-
-        function onTouchStart(e) {
-            if (placementMode || !placedModel) return;
-            e.preventDefault();
-
-            if (e.touches.length === 1) { // Drag to rotate
-                lastTouchX = e.touches[0].clientX;
-            } else if (e.touches.length === 2) { // Pinch to scale
-                initialPinchDistance = getPinchDistance(e.touches);
-                initialModelScale = placedModel.scale.x;
-            }
-        }
-
-        function onTouchMove(e) {
-            if (placementMode || !placedModel) return;
-            e.preventDefault();
-
-            if (e.touches.length === 1) { // Drag to rotate
-                const dx = e.touches[0].clientX - lastTouchX;
-                const newRotation = placedModel.rotation.y + (dx * 0.01);
-                
-                placedModel.rotation.y = newRotation;
-                // Update slider
-                rotateYSlider.value = THREE.MathUtils.radToDeg(newRotation) % 360;
-                
-                lastTouchX = e.touches[0].clientX;
-
-            } else if (e.touches.length === 2) { // Pinch to scale
-                const dist = getPinchDistance(e.touches);
-                const scaleFactor = dist / initialPinchDistance;
-                let newScale = initialModelScale * scaleFactor;
-
-                // Clamp scale
-                newScale = Math.max(0.1, Math.min(newScale, 2.0));
-                
-                placedModel.scale.set(newScale, newScale, newScale);
-                // Update slider
-                scaleSlider.value = newScale;
-            }
-        }
-
-        function onTouchEnd(e) {
-            // Reset gesture state
-            initialPinchDistance = 0;
-            lastTouchX = 0;
-        }
-
-        function getPinchDistance(touches) {
-            const dx = touches[0].clientX - touches[1].clientX;
-            const dy = touches[0].clientY - touches[1].clientY;
-            return Math.sqrt(dx * dx + dy * dy);
-        }
-
-        // --- SECTION 6: UI & UTILITY FUNCTIONS ---
-
-        /**
-         * 6. UI: Toggles AR mode (camera + motion) on/off
-         */
-        function toggleARMode() {
-            arMode = !arMode;
-            if (arMode) {
-                video.style.display = 'block';
-                deviceControls.connect(); // Re-enable motion controls
-                arToggleButton.textContent = 'AR Mode: ON';
-                document.documentElement.style.background = 'transparent';
-            } else {
-                video.style.display = 'none';
-                deviceControls.disconnect(); // Disable motion controls
-                arToggleButton.textContent = 'AR Mode: OFF';
-                // Set a fallback background
-                document.documentElement.style.background = (document.documentElement.getAttribute('data-theme') === 'dark') ? '#1a1a1a' : '#ffffff';
-                // Reset camera orientation
-                camera.position.set(0, 0, 0);
-                camera.lookAt(0, 0, -1);
-            }
-        }
-
-        /**
-         * 8. Optional: Light/Dark mode toggle
-         */
-        function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            if (currentTheme === 'dark') {
-                document.documentElement.setAttribute('data-theme', 'light');
-                themeToggleButton.textContent = '🌙';
-            } else {
-                document.documentElement.setAttribute('data-theme', 'dark');
-                themeToggleButton.textContent = '☀️';
-            }
-            // Update non-AR background color
-            if (!arMode) {
-                document.documentElement.style.background = (document.documentElement.getAttribute('data-theme') === 'dark') ? '#1a1a1a' : '#ffffff';
-            }
-        }
-
-        /**
-         * 6. UI: Shows a temporary notification toast
-         */
-        let toastTimeout;
-        function showToast(message) {
-            if (toastTimeout) clearTimeout(toastTimeout);
-            
-            notificationToast.textContent = message;
-            notificationToast.classList.add('show');
-            
-            toastTimeout = setTimeout(() => {
-                notificationToast.classList.remove('show');
-            }, 2500);
-        }
-
-        // --- GO! ---
-        init();
-
-    </script>
+    // Crear un enlace temporal para la descarga
+    const link = document.createElement('a');
+    link.href = dataURL;
+    link.download = 'captura-modelo-3d.png';
+    
+    // Simular clic para descargar
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showAlert('Captura guardada.');
+  } catch (e) {
+    console.error('Error al tomar la captura:', e);
+    showAlert('Error al tomar la captura.');
+  }
+}
+
+
+window.onload = function(){
+  initThree();
+  loadModelByName('Duck');
+  animate();
+  document.getElementById('placement-controls').classList.add('hidden');
+  document.getElementById('ar-mode-status').textContent = 'Inactivo';
+  document.getElementById('lock-status').textContent = 'OFF (Rotar)';
+  document.getElementById('control-panel').classList.remove('is-visible');
+};
+
+window.toggleControlPanel = toggleControlPanel;
+window.toggleARMode = toggleARMode;
+window.toggleMotionTracking = toggleMotionTracking;
+window.toggleInteractionMode = toggleInteractionMode;
+window.adjustScale = adjustScale;
+window.updateModelPlacement = updateModelPlacement;
+window.selectModel = selectModel;
+window.toggleModelSelector = toggleModelSelector;
+window.startRelocate = startRelocate;
+window.resetScale = resetScale;
+window.takeScreenshot = takeScreenshot; // Exponer la nueva función
+
+</script>
 </body>
 </html>
