@@ -74,6 +74,35 @@
       #request-permission-btn:hover {
         background: #1d4ed8;
       }
+      /* <!-- MODIFICACIÓN: Estilos para el botón de captura y el flash --> */
+      #capture-btn {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background-color: white;
+        border: 4px solid rgba(0,0,0,0.2);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+        z-index: 23;
+        display: none; /* Oculto por defecto */
+        cursor: pointer;
+        transition: transform 0.2s ease;
+      }
+      #capture-btn:active {
+        transform: translateX(-50%) scale(0.95);
+      }
+      #flash-overlay {
+        position: fixed;
+        inset: 0;
+        background: white;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 999;
+        transition: opacity 0.5s ease;
+      }
     </style>
 </head>
 <body class="bg-gray-100 antialiased">
@@ -89,6 +118,11 @@
 
   <!-- 3D container -->
   <div id="three-container"></div>
+  
+  <!-- MODIFICACIÓN: Overlay para efecto flash y botón de captura -->
+  <div id="flash-overlay"></div>
+  <button id="capture-btn" onclick="takeScreenshot()" aria-label="Tomar captura de pantalla"></button>
+
 
   <!-- Placement dot (overlay) -->
   <div id="placement-dot" role="button" aria-label="Point to place model" tabindex="0">
@@ -123,14 +157,6 @@
         <p class="text-sm text-gray-600 mb-2">Actual: <span id="lock-status" class="font-medium text-gray-900">OFF (Rotar)</span></p>
         <button class="px-4 py-2 rounded bg-indigo-600 text-white w-full" onclick="toggleInteractionMode()">Alternar (Rotar/Mover)</button>
     </div>
-
-    <!-- NUEVO BOTÓN DE CAPTURA DE PANTALLA -->
-    <div class="mb-6 border-t pt-4 border-gray-300">
-        <h3 class="font-semibold mb-2">Captura de Pantalla</h3>
-        <button class="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white w-full" onclick="takeScreenshot()">Guardar Imagen</button>
-        <p class="text-xs mt-1 text-gray-500">Guarda una imagen .png de la vista actual.</p>
-    </div>
-    <!-- FIN DE NUEVO BOTÓN -->
 
     <div class="mb-6 border-t pt-4 border-gray-300">
         <h3 class="font-bold text-lg mb-3 text-red-600">MODO PARED (AR Simulado)</h3>
@@ -207,6 +233,10 @@ const placementDot = document.getElementById('placement-dot');
 const placementHint = document.getElementById('placement-hint');
 const reubicBtn = document.getElementById('reubic-btn');
 const resetScaleBtn = document.getElementById('reset-scale-btn');
+// MODIFICACIÓN: Referencia al botón de captura y al flash
+const captureBtn = document.getElementById('capture-btn');
+const flashOverlay = document.getElementById('flash-overlay');
+
 
 let lastTapTime = 0;
 let placedOnce = false;
@@ -250,12 +280,8 @@ function initThree(){
   camera.position.set(0, 0, 0);
   camera.updateProjectionMatrix();
 
-  // MODIFICACIÓN: Añadir preserveDrawingBuffer: true
-  renderer = new THREE.WebGLRenderer({ 
-    antialias: true, 
-    alpha: true, 
-    preserveDrawingBuffer: true 
-  });
+  // MODIFICACIÓN: Habilitar preserveDrawingBuffer para permitir la captura del canvas
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setClearColor(0x3b4233, 1);
@@ -654,6 +680,10 @@ async function toggleARMode(){
       toggleBtn.classList.remove('bg-red-500'); toggleBtn.classList.add('bg-green-600');
       controls.enabled = false;
       document.getElementById('lock-status').textContent = 'ON (Mover)';
+      
+      // MODIFICACIÓN: Mostrar el botón de captura
+      captureBtn.style.display = 'block';
+
       if (!placedOnce){
         showPlacementDot(true);
         placementDot.style.left = '50%'; placementDot.style.top = '50%';
@@ -677,6 +707,10 @@ async function toggleARMode(){
     document.getElementById('lock-status').textContent = 'OFF (Rotar)';
     showPlacementDot(false);
     placementHint.style.display = 'none';
+
+    // MODIFICACIÓN: Ocultar el botón de captura
+    captureBtn.style.display = 'none';
+    
     toggleMotionTracking(false);
   }
 }
@@ -729,27 +763,54 @@ function resetScale(){
   showAlert('Escala reiniciada.');
 }
 
-// NUEVA FUNCIÓN PARA CAPTURA DE PANTALLA
+// MODIFICACIÓN: Nueva función para tomar la captura de pantalla
 function takeScreenshot() {
-  try {
-    // El 'renderer.domElement' es el canvas
-    const dataURL = renderer.domElement.toDataURL('image/png');
-    
-    // Crear un enlace temporal para la descarga
-    const link = document.createElement('a');
-    link.href = dataURL;
-    link.download = 'captura-modelo-3d.png';
-    
-    // Simular clic para descargar
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    showAlert('Captura guardada.');
-  } catch (e) {
-    console.error('Error al tomar la captura:', e);
-    showAlert('Error al tomar la captura.');
+  if (!isARMode) {
+    showAlert('El modo de captura solo está disponible en AR.');
+    return;
   }
+
+  // Elementos UI a ocultar durante la captura
+  const uiElements = [
+    document.getElementById('control-panel'),
+    document.getElementById('menu-icon'),
+    document.getElementById('capture-btn'),
+    document.getElementById('placement-dot'),
+    document.getElementById('placement-hint'),
+    document.getElementById('custom-alert')
+  ];
+
+  // Ocultar UI
+  uiElements.forEach(el => el.style.visibility = 'hidden');
+
+  // Esperar un instante para que la UI desaparezca del render
+  setTimeout(() => {
+    // Simular flash
+    flashOverlay.style.opacity = '1';
+    setTimeout(() => flashOverlay.style.opacity = '0', 100);
+
+    // Crear un canvas temporal
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // 1. Dibujar el video de fondo
+    context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+    // 2. Dibujar el canvas de Three.js encima (que es transparente)
+    context.drawImage(renderer.domElement, 0, 0, canvas.width, canvas.height);
+
+    // 3. Crear el enlace de descarga
+    const link = document.createElement('a');
+    link.download = `AR_Captura_${new Date().toISOString().slice(0,10)}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    
+    // Volver a mostrar UI
+    uiElements.forEach(el => el.style.visibility = 'visible');
+
+  }, 50); // 50ms de espera
 }
 
 
@@ -773,7 +834,8 @@ window.selectModel = selectModel;
 window.toggleModelSelector = toggleModelSelector;
 window.startRelocate = startRelocate;
 window.resetScale = resetScale;
-window.takeScreenshot = takeScreenshot; // Exponer la nueva función
+// MODIFICACIÓN: Exponer la nueva función al scope global
+window.takeScreenshot = takeScreenshot;
 
 </script>
 </body>
