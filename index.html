@@ -1,198 +1,79 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebAR Visor 3D</title>
-<style>
-  body, html {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    width: 100vw;
-    height: 100vh;
-    font-family: sans-serif;
-    background: #000;
-  }
-  #three-container {
-    width: 100%;
-    height: 100%;
-    touch-action: none;
-    position: relative;
-  }
-  #ui-overlay {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  button {
-    padding: 10px 16px;
-    background: #1f7fff;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-  }
-  button:active {
-    background: #005bb5;
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visor AR con Model Viewer</title>
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      font-family: sans-serif;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+    }
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #1f7fff;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button:active {
+      background: #005bb5;
+    }
+    model-viewer {
+      width: 100%;
+      height: 100vh;
+    }
+  </style>
 </head>
 <body>
-<div id="three-container"></div>
-<div id="ui-overlay">
-  <button id="start-ar-btn">Activar AR</button>
-  <button id="model-duck-btn">Duck</button>
-  <button id="model-boombox-btn">BoomBox</button>
-  <button id="model-helmet-btn">Helmet</button>
+
+<div id="ui">
+  <button id="btn-duck">Duck</button>
+  <button id="btn-boombox">BoomBox</button>
+  <button id="btn-helmet">Helmet</button>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/loaders/GLTFLoader.js"></script>
+<model-viewer id="ar-viewer"
+    src="https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF-Binary/Duck.glb"
+    alt="Duck"
+    camera-controls
+    auto-rotate
+    ar
+    ar-modes="webxr scene-viewer quick-look"
+    style="width:100%; height:100vh;">
+</model-viewer>
 
 <script>
-let scene, camera, renderer, reticle, controller;
-let model = null, currentScale = 1;
-const MODELS = {
-  Duck: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF/Duck.gltf',
-  BoomBox: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/BoomBox/glTF/BoomBox.gltf',
-  Helmet: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf'
-};
-let pinchState = { active: false, lastDist: 0 };
+const viewer = document.getElementById('ar-viewer');
 
-init();
-function init() {
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
-
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true;
-  document.getElementById('three-container').appendChild(renderer.domElement);
-
-  const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-  light.position.set(0.5,1,0.25);
-  scene.add(light);
-
-  // Reticle
-  const geometry = new THREE.RingGeometry(0.1,0.12,32).rotateX(-Math.PI/2);
-  const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-  reticle = new THREE.Mesh(geometry, material);
-  reticle.matrixAutoUpdate = false;
-  reticle.visible = false;
-  scene.add(reticle);
-
-  // Controller
-  controller = renderer.xr.getController(0);
-  controller.addEventListener('select', onSelect);
-  scene.add(controller);
-
-  window.addEventListener('resize', onWindowResize, false);
-
-  // Pinch zoom handlers
-  renderer.domElement.addEventListener('touchstart', onTouchStart, {passive:false});
-  renderer.domElement.addEventListener('touchmove', onTouchMove, {passive:false});
-  renderer.domElement.addEventListener('touchend', onTouchEnd, {passive:false});
-
-  animate();
-}
-
-function onWindowResize() {
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-async function loadModel(name) {
-  if(model) scene.remove(model);
-  const loader = new THREE.GLTFLoader();
-  loader.load(MODELS[name], gltf => {
-    model = gltf.scene;
-    model.visible = false;
-    currentScale = 0.5;
-    model.scale.setScalar(currentScale);
-    scene.add(model);
-  });
-}
-
-async function onSelect() {
-  if(!model) return;
-  model.position.setFromMatrixPosition(reticle.matrix);
-  model.visible = true;
-}
-
-document.getElementById('start-ar-btn').addEventListener('click', async () => {
-  if(navigator.xr) {
-    try {
-      const session = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test','dom-overlay'],
-        domOverlay: { root: document.body }
-      });
-      renderer.xr.setSession(session);
-      const referenceSpace = await session.requestReferenceSpace('local');
-      const viewerSpace = await session.requestReferenceSpace('viewer');
-      const hitTestSource = await session.requestHitTestSource({space: viewerSpace});
-
-      session.addEventListener('end', ()=> reticle.visible = false);
-
-      renderer.setAnimationLoop((timestamp, frame) => {
-        if(frame){
-          const hitResults = frame.getHitTestResults(hitTestSource);
-          if(hitResults.length){
-            const hit = hitResults[0];
-            const pose = hit.getPose(referenceSpace);
-            reticle.visible = true;
-            reticle.matrix.fromArray(pose.transform.matrix);
-          } else reticle.visible = false;
-        }
-        renderer.render(scene, camera);
-      });
-
-    } catch(e) {
-      alert('AR no soportado o permisos denegados.');
-    }
-  } else alert('WebXR no disponible.');
+document.getElementById('btn-duck').addEventListener('click', () => {
+  viewer.src = "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF-Binary/Duck.glb";
 });
 
-// Botones de modelo
-document.getElementById('model-duck-btn').addEventListener('click', ()=> loadModel('Duck'));
-document.getElementById('model-boombox-btn').addEventListener('click', ()=> loadModel('BoomBox'));
-document.getElementById('model-helmet-btn').addEventListener('click', ()=> loadModel('Helmet'));
+document.getElementById('btn-boombox').addEventListener('click', () => {
+  viewer.src = "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/BoomBox/glTF/BoomBox.glb";
+});
 
-// Pinch-to-scale
-function onTouchStart(e){
-  if(e.touches.length === 2){
-    pinchState.active = true;
-    const dx = e.touches[0].clientX - e.touches[1].clientX;
-    const dy = e.touches[0].clientY - e.touches[1].clientY;
-    pinchState.lastDist = Math.hypot(dx, dy);
-  }
-}
-function onTouchMove(e){
-  if(pinchState.active && e.touches.length === 2 && model){
-    e.preventDefault();
-    const dx = e.touches[0].clientX - e.touches[1].clientX;
-    const dy = e.touches[0].clientY - e.touches[1].clientY;
-    const newDist = Math.hypot(dx, dy);
-    if(pinchState.lastDist>0){
-      const factor = newDist / pinchState.lastDist;
-      currentScale = Math.min(5, Math.max(0.05, currentScale*factor));
-      model.scale.setScalar(currentScale);
-    }
-    pinchState.lastDist = newDist;
-  }
-}
-function onTouchEnd(e){
-  if(!e.touches || e.touches.length<2) pinchState.active=false;
-}
-
-function animate(){
-  renderer.setAnimationLoop(()=> renderer.render(scene, camera));
-}
+document.getElementById('btn-helmet').addEventListener('click', () => {
+  viewer.src = "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb";
+});
 </script>
+
 </body>
 </html>
