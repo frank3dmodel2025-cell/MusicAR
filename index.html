@@ -1,147 +1,238 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Demo AR — Casco Helmet</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebAR Básico</title>
+    <!-- 1. Cargar Tailwind CSS para estilos rápidos -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Tailwind para un diseño limpio -->
-  <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. Import Map (¡LA CORRECCIÓN!) -->
+    <!-- Esto le dice al navegador:
+         - Cualquier script que pida "three", debe cargar 'three.module.js'.
+         - Cualquier script que pida algo de "three/examples/jsm/", debe buscarlo en esa carpeta del CDN.
+         Esto resuelve el error "Failed to resolve module specifier".
+    -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
 
-  <!-- Three.js y módulos WebXR -->
-  <script type="module" src="https://unpkg.com/three@0.165.0/build/three.module.js"></script>
-  <script type="module" src="https://unpkg.com/three@0.165.0/examples/jsm/loaders/GLTFLoader.js"></script>
-  <script type="module" src="https://unpkg.com/three@0.165.0/examples/jsm/webxr/ARButton.js"></script>
+    <style>
+        /* Estilos adicionales */
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Evitar scroll */
+            font-family: 'Inter', sans-serif;
+        }
+        /* El ARButton.js que importaremos crea su propio botón con ID 'ARButton' */
+        #ARButton {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.75rem 1.5rem;
+            background-color: #4A90E2; /* Azul bonito */
+            color: white;
+            font-weight: bold;
+            border-radius: 9999px; /* Píldora */
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+            z-index: 100;
+        }
+        #ARButton:hover {
+            background-color: #357ABD;
+        }
+    </style>
 </head>
+<body class="bg-gray-900 text-white">
 
-<body class="bg-gray-900 text-white flex flex-col items-center justify-center h-screen">
-  <div class="absolute top-5 text-center">
-    <h1 class="text-2xl font-semibold">Realidad Aumentada — Helmet</h1>
-    <p class="text-gray-400 text-sm">Apunta tu cámara a una superficie y toca para colocar el modelo</p>
-  </div>
+    <!-- 3. Contenedor para las instrucciones -->
+    <div id="instructions" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-6 bg-black bg-opacity-50 rounded-lg shadow-lg text-center">
+        <h1 class="text-2xl font-bold mb-2">WebAR Simple</h1>
+        <p class="text-gray-300">Haz clic en "Iniciar AR" en un dispositivo compatible.</p>
+        <p class="text-sm text-gray-400">(Asegúrate de estar en un entorno bien iluminado)</p>
+    </div>
 
-  <div id="ar-container" class="w-full h-full"></div>
+    <!-- 4. El script principal de Three.js y WebXR -->
+    <script type="module">
+        // --- IMPORTACIONES ESENCIALES ---
+        // Ahora podemos usar las rutas cortas gracias al "importmap"
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+        import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
 
-  <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.165.0/build/three.module.js';
-    import { GLTFLoader } from 'https://unpkg.com/three@0.165.0/examples/jsm/loaders/GLTFLoader.js';
-    import { ARButton } from 'https://unpkg.com/three@0.165.0/examples/jsm/webxr/ARButton.js';
 
-    let camera, scene, renderer;
-    let model = null;
-    let reticle; // marcador para mostrar dónde colocar el modelo
-    let hitTestSource = null;
-    let localSpace = null;
-    let hitTestSourceRequested = false;
+        // --- VARIABLES GLOBALES ---
+        let camera, scene, renderer;
+        let loader; // Cargador de modelos
+        let model;  // Nuestro modelo 3D
+        let reticle; // Un cursor visual para mostrar dónde colocaremos el objeto
+        let controller; // El "dedo" del usuario (controlador de entrada)
 
-    init();
-    animate();
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
 
-    function init() {
-      scene = new THREE.Scene();
+        // --- INICIALIZACIÓN ---
+        init();
+        animate(); // Iniciar el bucle de renderizado
 
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+        function init() {
+            // --- CONFIGURACIÓN BÁSICA DE LA ESCENA ---
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      // Luces básicas
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-      scene.add(hemiLight);
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-      dirLight.position.set(1, 1, 1);
-      scene.add(dirLight);
+            // Luces: necesarias para que el modelo no se vea negro
+            const ambientLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            ambientLight.position.set(0.5, 1, 0.25);
+            scene.add(ambientLight);
 
-      // Renderizador
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.getElementById('ar-container').appendChild(renderer.domElement);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(0.1, 1, 0);
+            scene.add(dirLight);
 
-      // Botón AR
-      document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+            // --- RENDERER (EL LIENZO 3D) ---
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            // ¡Habilitar WebXR!
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
 
-      // Modelo Helmet
-      const loader = new GLTFLoader();
-      loader.load(
-        'https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf',
-        (gltf) => {
-          model = gltf.scene;
-          model.scale.set(0.8, 0.8, 0.8);
-          model.visible = false;
-          scene.add(model);
-        },
-        undefined,
-        (error) => console.error('Error al cargar el modelo:', error)
-      );
-
-      // Retículo (indicador de posición)
-      const ringGeo = new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2);
-      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
-      reticle = new THREE.Mesh(ringGeo, ringMat);
-      reticle.matrixAutoUpdate = false;
-      reticle.visible = false;
-      scene.add(reticle);
-
-      // Controlador de interacción (tocar pantalla)
-      const controller = renderer.xr.getController(0);
-      controller.addEventListener('select', onSelect);
-      scene.add(controller);
-
-      window.addEventListener('resize', onWindowResize);
-    }
-
-    function onSelect() {
-      if (model && reticle.visible) {
-        model.position.setFromMatrixPosition(reticle.matrix);
-        model.visible = true;
-      }
-    }
-
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    function animate() {
-      renderer.setAnimationLoop(render);
-    }
-
-    function render(timestamp, frame) {
-      if (frame) {
-        const referenceSpace = renderer.xr.getReferenceSpace();
-        const session = renderer.xr.getSession();
-
-        if (!hitTestSourceRequested) {
-          session.requestReferenceSpace('viewer').then((refSpace) => {
-            session.requestHitTestSource({ space: refSpace }).then((source) => {
-              hitTestSource = source;
+            // --- BOTÓN DE AR ---
+            // El script ARButton.js crea un botón que:
+            // 1. Comprueba si el navegador soporta WebXR ("AR CORE" en Android, etc.)
+            // 2. Si lo soporta, muestra "Iniciar AR".
+            // 3. Si no, muestra "WebXR no soportado".
+            // 4. 'hit-test' es la función que nos permite detectar superficies (el suelo).
+            const arButton = ARButton.createButton(renderer, {
+                requiredFeatures: ['hit-test']
             });
-          });
-          session.addEventListener('end', () => {
-            hitTestSourceRequested = false;
-            hitTestSource = null;
-          });
-          hitTestSourceRequested = true;
+            document.body.appendChild(arButton);
+
+            // Ocultar instrucciones cuando entramos en AR
+            renderer.xr.addEventListener('sessionstart', () => {
+                document.getElementById('instructions').style.display = 'none';
+            });
+            renderer.xr.addEventListener('sessionend', () => {
+                document.getElementById('instructions').style.display = 'block';
+            });
+
+
+            // --- CARGAR EL MODELO 3D ---
+            // Usaremos un modelo .glb (un solo archivo) para simplicidad.
+            // ¡Esta URL ha sido CORREGIDA para que no dé 404!
+            const modelUrl = 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
+            loader = new GLTFLoader();
+            loader.load(modelUrl, (gltf) => {
+                model = gltf.scene;
+                // El modelo se carga pero no se muestra
+                // Se hará visible cuando el usuario toque la pantalla.
+                model.visible = false;
+                // Lo escalamos porque el astronauta es muy grande por defecto
+                model.scale.set(0.2, 0.2, 0.2); 
+                scene.add(model);
+                console.log("Modelo Astronauta cargado.");
+            }, undefined, (error) => {
+                console.error("Error cargando el modelo:", error);
+            });
+
+            // --- RETÍCULO (CURSOR DE AR) ---
+            // Un anillo simple que muestra dónde se detecta una superficie.
+            const reticleGeo = new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2);
+            const reticleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            reticle = new THREE.Mesh(reticleGeo, reticleMat);
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false; // Solo visible cuando detecta un suelo
+            scene.add(reticle);
+
+            // --- CONTROLADOR (EVENTO DE TAP) ---
+            controller = renderer.xr.getController(0);
+            // El evento 'select' se dispara cuando el usuario toca la pantalla.
+            controller.addEventListener('select', onSelect);
+            scene.add(controller);
+
+            // Manejar redimensionamiento de la ventana
+            window.addEventListener('resize', onWindowResize);
         }
 
-        if (hitTestSource) {
-          const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-          if (hitTestResults.length) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(referenceSpace);
-            reticle.visible = true;
-            reticle.matrix.fromArray(pose.transform.matrix);
-          } else {
-            reticle.visible = false;
-          }
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         }
-      }
 
-      // Animación suave si el modelo está visible
-      if (model && model.visible) model.rotation.y += 0.01;
+        // --- COLOCAR EL OBJETO AL TOCAR LA PANTALLA ---
+        function onSelect() {
+            // Solo colocamos el objeto si el retículo es visible (es decir, estamos apuntando a un suelo)
+            // y el modelo ha sido cargado.
+            if (reticle.visible && model) {
+                // Copiar la posición y orientación del retículo a nuestro modelo
+                model.position.setFromMatrixPosition(reticle.matrix);
+                model.quaternion.setFromRotationMatrix(reticle.matrix);
+                model.visible = true;
+            }
+        }
 
-      renderer.render(scene, camera);
-    }
-  </script>
+        // --- BUCLE DE RENDERIZADO (SE EJECUTA CADA FRAME) ---
+        function animate() {
+            // Esto es importante para WebXR, usa setAnimationLoop
+            renderer.setAnimationLoop(render);
+        }
+
+        function render(timestamp, frame) {
+            // 'frame' solo existe cuando estamos en una sesión de AR
+            if (frame) {
+                const session = renderer.xr.getSession();
+
+                // 1. Pedir la fuente de "hit-test" (detección de superficies) si no la tenemos
+                if (!hitTestSourceRequested) {
+                    session.requestReferenceSpace('viewer').then((referenceSpace) => {
+                        session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+                            hitTestSource = source;
+                        });
+                    });
+                    // Nos aseguramos de pedirlo solo una vez
+                    hitTestSourceRequested = true;
+                }
+
+                // 2. Si tenemos la fuente, buscar superficies
+                if (hitTestSource) {
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+                    // 3. Si encontramos una superficie...
+                    if (hitTestResults.length > 0) {
+                        const hit = hitTestResults[0];
+                        const hitMatrix = hit.getPose(renderer.xr.getReferenceSpace()).transform.matrix;
+                        
+                        // Actualizar la posición del retículo
+                        reticle.visible = true;
+                        reticle.matrix.fromArray(hitMatrix);
+                    } else {
+                        // No se encontró superficie, ocultar el retículo
+                        reticle.visible = false;
+                    }
+                }
+            }
+
+            // 4. (Opcional) Rotar el modelo si ya es visible
+            if (model && model.visible) {
+                model.rotation.y += 0.005; // Rotación lenta
+            }
+
+            // 5. Renderizar la escena
+            renderer.render(scene, camera);
+        }
+
+    </script>
 </body>
 </html>
+
