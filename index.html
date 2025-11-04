@@ -1,131 +1,128 @@
-<!-- 
-  WebAR Image Tracking con AR.js y A-Frame (Sin Marcador Tradicional)
-  
-  Este ejemplo utiliza AR.js para el rastreo de una imagen compleja (Trigger Image - NFT) 
-  y A-Frame para renderizar un objeto 3D sobre esa imagen cuando es detectada por la cámara.
-  
-  NFT (Natural Feature Tracking) permite usar cualquier imagen impresa como disparador.
--->
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebAR - Rastreo de Imagen Natural</title>
-    <!-- Carga de la librería A-Frame (para 3D) -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <!-- Carga de la librería AR.js (para Realidad Aumentada - NFT) -->
-    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.0/aframe/build/aframe-ar-nft.js"></script>
-    
-    <!-- Componente para cargar el modelo 3D de glTF (Platillo Volador) -->
-    <script>
-        // Este es un componente A-Frame simple para añadir animación de rotación
-        AFRAME.registerComponent('rotacion-animada', {
-            tick: function () {
-                this.el.object3D.rotation.y += 0.01;
-            }
-        });
-    </script>
-
+    <title>Web AR de Coche 3D</title>
+    <!-- Script para importar el componente Model-viewer de Google -->
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
     <style>
-        /* Estilos Tailwind CSS simulados para estética moderna */
-        .info-box {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            padding: 15px;
-            background-color: #2c3e50; /* Azul oscuro */
-            color: #ecf0f1; /* Blanco suave */
+        /* Estilos generales para ocupar toda la pantalla */
+        body {
+            margin: 0;
+            padding: 0;
             font-family: 'Inter', sans-serif;
-            font-size: 16px;
-            text-align: center;
-            z-index: 1000;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border-radius: 0 0 10px 10px;
+            background-color: #f7f7f7;
         }
-        .info-box a {
-            color: #3498db; /* Azul brillante */
-            text-decoration: none;
+
+        /* El componente model-viewer ocupa la mayor parte de la ventana */
+        model-viewer {
+            width: 100vw;
+            height: 90vh; /* Usa 90vh para dejar espacio para el menú o el botón AR */
+            background-color: #e0f2f1; /* Un fondo suave para el visor 3D */
+            border: none;
+        }
+
+        /* Estilos para el botón AR personalizado */
+        #ar-button {
+            /* Positionamiento absoluto para colocarlo en la esquina inferior derecha */
+            position: absolute;
+            right: 35px;
+            bottom: 35px;
+            
+            /* Estilos de botón */
+            width: 150px;
+            height: 50px;
+            background-color: #00897b; /* Color verde azulado */
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 10px 20px;
+            font-size: 1rem;
             font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            z-index: 10; /* Asegura que esté por encima del modelo */
         }
-        .info-box h3 {
-            margin-top: 0;
-            font-size: 1.2em;
-            color: #f1c40f; /* Amarillo */
+
+        #ar-button:hover {
+            background-color: #00695c;
         }
-        body { margin: 0; overflow: hidden; background-color: #f4f4f4; }
+
+        #ar-button:active {
+            transform: scale(0.98);
+        }
+
+        /* Contenedor para el título y descripción */
+        .header-bar {
+            width: 100%;
+            height: 10vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .header-bar h1 {
+            font-size: 1.2rem;
+            color: #004d40;
+            margin: 0;
+        }
+
+        /* Media Query para móvil: ajustar la posición del botón */
+        @media (max-width: 600px) {
+            #ar-button {
+                right: 20px;
+                bottom: 20px;
+                width: 120px;
+                height: 45px;
+                font-size: 0.9rem;
+            }
+        }
     </style>
 </head>
 <body>
-
-    <!-- 
-      Contenedor de información para el usuario
-      La URL de la imagen de rastreo. Hemos cambiado la imagen a una de prueba oficial de AR.js NFT.
-    -->
-    <div class="info-box">
-        <h3>🚀 WebAR: Simulación Artivive (Rastreo Sin Marcador)</h3>
-        <p>1. Permite el acceso a la cámara.</p>
-        <p>2. Abre esta imagen en otro dispositivo o imprímela:</p>
-        <p><a href="https://raw.githubusercontent.com/AR-js-org/AR.js/master/aframe/examples/image-tracking/nft/artworks/artworks.jpg" target="_blank">IMAGEN DE DISPARO (Pintura Abstracta)</a></p>
-        <p>3. Apunta la cámara de este dispositivo a la imagen para ver el OVNI.</p>
+    <div class="header-bar">
+        <h1>Modelo 3D Interactivo (Listo para AR)</h1>
     </div>
 
     <!-- 
-      a-scene: Define la escena de Realidad Aumentada.
-      arjs: Configuración de AR.js para usar NFT (rastreo de imágenes naturales)
-          - nft: url(URL del archivo de datos de rastreo pre-procesados - el .fset y .iset)
+        El componente model-viewer con atributos clave:
+        - src: Ruta al modelo GLB para visualización web/Android.
+        - ios-src: Ruta al modelo USDZ para Quick Look en iOS.
+        - ar: Habilita la funcionalidad de Realidad Aumentada.
+        - camera-controls: Permite al usuario rotar el modelo.
+        - touch-action: Indicación visual de que el modelo es interactivo.
+        - shadow-intensity: Añade una sombra para realismo.
+        - alt: Texto descriptivo para accesibilidad.
     -->
-    <a-scene 
-        embedded 
-        arjs='sourceType: webcam; trackingMethod: best; debugUIEnabled: false; initializationDelay: 0; nft: url(https://arjs-cors-proxy.s3.eu-central-1.amazonaws.com/nft/artworks);'
-    >
+    <model-viewer 
+        src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+        ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
+        ar
+        camera-controls
+        touch-action="pan-y"
+        shadow-intensity="1"
+        alt="Un modelo 3D de un astronauta"
+        exposure="1.0"
+        shadow-softness="1">
 
-        <!-- 
-          a-nft: El elemento clave que rastrea la imagen.
-          url: Apunta a los archivos de rastreo pre-procesados de la imagen de arte abstracto.
-          NOTA: El archivo de datos 'artworks' corresponde a la imagen 'artworks.jpg' referenciada arriba.
-        -->
-        <a-nft 
-            type='nft' 
-            url='https://arjs-cors-proxy.s3.eu-central-1.amazonaws.com/nft/artworks'
-            smooth='true' 
-            smoothTime='0.1' 
-            smoothThreshold='5'
-        >
-            <!-- Objeto 3D (Platillo Volador) que aparecerá sobre la imagen rastreada -->
-            <a-entity 
-                gltf-model="url(https://cdn.glitch.com/a4d79a29-e85c-4389-91b5-85c1c8f1925b%2Fflying-saucer.glb?v=1602187652750)" 
-                position='0 1.5 0' 
-                scale='3 3 3' 
-                rotacion-animada
-            >
-                <!-- Sombra para mejorar la inmersión -->
-                <a-plane 
-                    position="0 -0.5 0" 
-                    rotation="-90 0 0" 
-                    width="1" 
-                    height="1" 
-                    opacity="0.5" 
-                    color="#000"
-                ></a-plane>
-            </a-entity>
+        <!-- Botón personalizado para iniciar la Realidad Aumentada -->
+        <button slot="ar-button" id="ar-button">
+            Iniciar AR
+        </button>
 
-            <!-- Texto descriptivo flotante -->
-            <a-text 
-                value="¡WebAR Sin Marcador!" 
-                align="center" 
-                width="2" 
-                color="#f1c40f"
-                position="0 2.5 0" 
-                rotation="-90 0 0"
-            ></a-text>
+    </model-viewer>
 
-        </a-nft>
+    <!--
+        NOTA IMPORTANTE: 
+        El video original usa un modelo de coche, pero dado que no podemos subir archivos 3D directamente, 
+        estamos usando el modelo de 'Astronauta' de los ejemplos de Google como sustituto, el cual está 
+        disponible públicamente y funciona perfectamente con la función AR.
+        Para usar tu propio modelo, reemplaza las URLs de 'src' e 'ios-src' con las rutas a tus archivos GLB y USDZ.
+    -->
 
-        <!-- a-entity: Representa la cámara del dispositivo -->
-        <a-entity camera></a-entity>
-
-    </a-scene>
 </body>
 </html>
