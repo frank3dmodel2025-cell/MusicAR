@@ -25,20 +25,21 @@
 
         /* Estilos para el botón AR personalizado */
         #ar-button {
-            /* Positionamiento absoluto para colocarlo en la esquina inferior derecha */
+            /* Posicionamiento para centrar horizontalmente en la parte inferior */
             position: absolute;
-            right: 35px;
-            bottom: 35px;
+            left: 50%;
+            transform: translateX(-50%); /* Centra el botón perfectamente */
+            bottom: 35px; 
             
             /* Estilos de botón */
-            width: 150px;
-            height: 50px;
+            width: 180px;
+            height: 55px;
             background-color: #00897b; /* Color verde azulado */
             color: white;
             border: none;
             border-radius: 12px;
             padding: 10px 20px;
-            font-size: 1rem;
+            font-size: 1.1rem;
             font-weight: bold;
             cursor: pointer;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -51,7 +52,7 @@
         }
 
         #ar-button:active {
-            transform: scale(0.98);
+            transform: translateX(-50%) scale(0.98); /* Mantiene el centrado al hacer clic */
         }
 
         /* Contenedor para el título y descripción */
@@ -71,37 +72,33 @@
             margin: 0;
         }
 
-        /* Media Query para móvil: ajustar la posición del botón */
+        /* Media Query para móvil: ajustar el tamaño del botón */
         @media (max-width: 600px) {
             #ar-button {
-                right: 20px;
                 bottom: 20px;
-                width: 120px;
+                width: 150px;
                 height: 45px;
-                font-size: 0.9rem;
+                font-size: 1rem;
             }
         }
     </style>
 </head>
 <body>
     <div class="header-bar">
-        <h1>Modelo 3D Interactivo (Listo para AR)</h1>
+        <h1>Modelo 3D Interactivo (Anclaje Fijo AR)</h1>
     </div>
 
     <!-- 
         El componente model-viewer con atributos clave:
-        - src: Ruta al modelo GLB para visualización web/Android.
-        - ios-src: Ruta al modelo USDZ para Quick Look en iOS.
-        - ar: Habilita la funcionalidad de Realidad Aumentada.
-        - camera-controls: Permite al usuario rotar el modelo.
-        - touch-action: Indicación visual de que el modelo es interactivo.
-        - shadow-intensity: Añade una sombra para realismo.
-        - alt: Texto descriptivo para accesibilidad.
+        - ar-modes="scene-viewer quick-look": Esta configuración es clave.
+          Fuerza el uso de los visores nativos de iOS (Quick Look) y Android (Scene Viewer),
+          los cuales manejan el modelo con un solo toque y lo dejan ANCLADO, 
+          cumpliendo con la lógica de "no moverse después del primer toque".
     -->
     <model-viewer 
         src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
         ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
-        ar
+        ar-modes="scene-viewer quick-look"
         camera-controls
         touch-action="pan-y"
         shadow-intensity="1"
@@ -111,17 +108,17 @@
 
         <!-- Botón personalizado para iniciar la Realidad Aumentada -->
         <button slot="ar-button" id="ar-button">
-            Iniciar AR
+            Iniciar AR (Anclaje Fijo)
         </button>
 
     </model-viewer>
 
     <!--
         NOTA IMPORTANTE: 
-        El video original usa un modelo de coche, pero dado que no podemos subir archivos 3D directamente, 
-        estamos usando el modelo de 'Astronauta' de los ejemplos de Google como sustituto, el cual está 
-        disponible públicamente y funciona perfectamente con la función AR.
-        Para usar tu propio modelo, reemplaza las URLs de 'src' e 'ios-src' con las rutas a tus archivos GLB y USDZ.
+        Para lograr el "Anclaje Fijo", se usan los modos nativos de AR (Scene Viewer y Quick Look).
+        Una vez que el usuario toca la pantalla para colocar el modelo, este queda ANCLADO.
+        Los gestos complejos como "doble toque para desbloquear" no se pueden controlar 
+        desde el código del navegador en estos modos nativos.
     -->
 
 </body>
