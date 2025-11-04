@@ -54,6 +54,24 @@
       button:active {
         transform: scale(0.98);
       }
+      /* Estilo para el mensaje de notificación */
+      #message-box {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 10px 20px;
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        border-radius: 8px;
+        z-index: 1000;
+        opacity: 0;
+        transition: opacity 0.5s ease;
+        pointer-events: none;
+      }
+      #message-box.visible {
+        opacity: 1;
+      }
     </style>
 </head>
 <body>
@@ -67,14 +85,16 @@
       1. src: Ruta al modelo (siempre GLB o GLTF).
       2. ar: Activa el modo AR.
       3. ar-modes: Define los modos compatibles (webxr, scene-viewer, quick-look).
-      4. camera-controls: Permite rotación y zoom 3D.
-      5. shadow-intensity: Hace que el modelo se vea más realista.
+      4. ar-placement="floor": Indica al WebXR que use la detección de plano.
+      5. camera-controls: Permite rotación y zoom 3D.
+      6. shadow-intensity: Hace que el modelo se vea más realista.
     -->
     <model-viewer
       id="model-viewer-element"
       src="https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF/Duck.gltf"
       ar
       ar-modes="webxr scene-viewer quick-look"
+      ar-placement="floor" 
       camera-controls
       shadow-intensity="1"
       alt="Modelo 3D para Realidad Aumentada"
@@ -97,19 +117,35 @@
           <button class="px-4 py-2 rounded bg-gray-200 w-full" data-model="Helmet">Casco (Helmet)</button>
           <button class="px-4 py-2 rounded bg-gray-200 w-full" data-model="BoomBox">BoomBox</button>
       </div>
-      <p class="text-sm text-gray-600 mt-4">Toca el modelo 3D para rotar/hacer zoom o el botón "Ver en tu mundo (AR)" para la Realidad Aumentada nativa de tu dispositivo.</p>
+      <p class="text-sm text-gray-600 mt-4">Toca el modelo 3D para rotar/hacer zoom. En modo AR, toca la pantalla para reubicar el modelo (en WebXR) o usa los gestos nativos de tu dispositivo (en Quick Look/Scene Viewer).</p>
     </div>
   </div>
+
+  <div id="message-box"></div>
 
 <script>
   const modelViewer = document.getElementById('model-viewer-element');
   const selector = document.getElementById('model-selector');
+  const messageBox = document.getElementById('message-box');
+  let isArActive = false;
 
   const MODELS = {
     Duck: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF/Duck.gltf',
     Helmet: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
     BoomBox: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/BoomBox/glTF/BoomBox.gltf'
   };
+  
+  /**
+   * Muestra un mensaje temporal en pantalla.
+   * @param {string} message 
+   */
+  function showMessage(message) {
+      messageBox.textContent = message;
+      messageBox.classList.add('visible');
+      setTimeout(() => {
+          messageBox.classList.remove('visible');
+      }, 3000);
+  }
 
   /**
    * Updates the model-viewer source and button styles.
@@ -134,6 +170,38 @@
     }
   }
 
+  // --- Lógica de Realidad Aumentada (AR) y Reubicación ---
+
+  // 1. Monitorear el estado de AR
+  modelViewer.addEventListener('ar-status', (event) => {
+      isArActive = event.detail.status === 'session-started';
+      if (isArActive) {
+          showMessage("Modo AR Activo. Toca la pantalla para reubicar el modelo.");
+      } else if (event.detail.status === 'session-ended') {
+          showMessage("Modo AR Finalizado.");
+      }
+      // console.log('AR Status:', event.detail.status);
+  });
+
+  // 2. Escuchar el evento de toque (click) para reubicar en WebXR
+  modelViewer.addEventListener('click', (event) => {
+      // Solo intenta reubicar si está en una sesión AR activa (generalmente WebXR)
+      if (isArActive) {
+          // Nota: La reubicación en AR nativa (Quick Look/Scene Viewer) es controlada por el SO.
+          // Para WebXR, usamos el método 'recenter' que fuerza al modelo a ajustarse 
+          // al punto central del plano detectado, simulando la reubicación en el toque.
+          
+          if (modelViewer.recenter) {
+              modelViewer.recenter();
+              showMessage("Modelo reubicado cerca del punto de toque.");
+          } else {
+              // Si 'recenter' no está disponible o es una sesión nativa
+              showMessage("El modelo se reubicará con el gesto nativo de tu dispositivo.");
+          }
+      }
+  });
+
+
   // Event listener for model selector buttons
   selector.addEventListener('click', (e) => {
     if(e.target.tagName === 'BUTTON' && e.target.dataset.model){
@@ -141,7 +209,7 @@
     }
   });
 
-  // Initial setup (Duck is already set in HTML, but good practice to call selectModel)
+  // Initial setup
   document.addEventListener('DOMContentLoaded', () => {
     selectModel('Duck');
   });
