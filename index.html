@@ -1,901 +1,517 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mobile Web AR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArtAR Viewer | Simulador de Realidad Aumentada</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <!-- Carga de Three.js y OrbitControls para interacción -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Iconos de Lucide React, aunque no es React, los usamos como SVGs -->
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
-
+        /* Estilos personalizados y generales para un look minimalista */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            overflow: hidden;
-            touch-action: none;
-            background: #000;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden; /* Evita el scroll en el modo AR */
         }
-
-        /* Video Background for AR */
-        #video {
+        #ar-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Previene gestos por defecto del navegador */
+        }
+        #video-background {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
-            z-index: 1;
-            display: none;
-        }
-
-        /* Three.js Canvas */
-        #canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 2;
-        }
-
-        /* UI Container */
-        .ui-container {
-            position: fixed;
             z-index: 10;
-            pointer-events: none;
+            display: none; /* Inicialmente oculto */
         }
-
-        .ui-container > * {
-            pointer-events: auto;
+        .gallery-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
         }
-
-        /* Top Bar */
-        .top-bar {
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+        .gallery-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
         }
-
-        .btn {
-            background: rgba(255,255,255,0.9);
-            border: none;
-            border-radius: 12px;
-            padding: 12px 20px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        }
-
-        .btn:active {
-            transform: scale(0.95);
-            background: rgba(255,255,255,0.7);
-        }
-
-        .btn-icon {
-            padding: 12px;
-            width: 44px;
-            height: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .btn-primary {
-            background: rgba(0,122,255,0.9);
-            color: white;
-        }
-
-        .btn-primary:active {
-            background: rgba(0,122,255,0.7);
-        }
-
-        /* Center Reticle */
-        .reticle {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(255,255,255,0.8);
-            border-radius: 50%;
-            z-index: 5;
-            pointer-events: none;
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        .reticle::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 8px;
-            height: 8px;
-            background: rgba(255,255,255,0.9);
-            border-radius: 50%;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
-            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-        }
-
-        /* Bottom Panel */
-        .bottom-panel {
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 20px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%);
-        }
-
-        .model-selector {
-            display: flex;
-            gap: 10px;
-            overflow-x: auto;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .model-card {
-            min-width: 80px;
-            height: 80px;
-            background: rgba(255,255,255,0.1);
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .model-card.active {
-            background: rgba(0,122,255,0.3);
-            border-color: rgba(0,122,255,1);
-        }
-
-        .model-card span {
-            color: white;
-            font-size: 12px;
-            margin-top: 5px;
-            text-align: center;
-        }
-
-        /* Controls */
-        .controls {
-            background: rgba(0,0,0,0.6);
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 10px;
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s;
-        }
-
-        .controls.show {
-            max-height: 300px;
-        }
-
-        .control-group {
-            margin-bottom: 12px;
-        }
-
-        .control-group:last-child {
-            margin-bottom: 0;
-        }
-
-        .control-group label {
-            color: white;
-            font-size: 12px;
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-        }
-
-        input[type="range"] {
-            width: 100%;
-            height: 30px;
-            -webkit-appearance: none;
-            appearance: none;
-            background: transparent;
-        }
-
-        input[type="range"]::-webkit-slider-track {
-            width: 100%;
-            height: 4px;
-            background: rgba(255,255,255,0.3);
-            border-radius: 2px;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            background: white;
-            border-radius: 50%;
-            cursor: pointer;
-            margin-top: -8px;
-        }
-
-        .button-row {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .button-row .btn {
-            flex: 1;
-        }
-
-        /* Notification */
-        .notification {
-            position: fixed;
-            top: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.9);
-            color: white;
-            padding: 15px 25px;
-            border-radius: 25px;
-            font-size: 14px;
-            z-index: 20;
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-        }
-
-        .notification.show {
-            opacity: 1;
-        }
-
-        /* Permission Overlay */
-        .permission-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.95);
-            z-index: 100;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 30px;
-        }
-
-        .permission-content {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            max-width: 400px;
-            text-align: center;
-        }
-
-        .permission-content h2 {
-            margin-bottom: 15px;
-            color: #333;
-        }
-
-        .permission-content p {
-            color: #666;
-            margin-bottom: 25px;
-            line-height: 1.5;
-        }
-
-        /* Loading */
-        .loading {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 16px;
-            z-index: 50;
-            text-align: center;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(255,255,255,0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Dark Mode */
-        body.dark-mode .btn {
-            background: rgba(50,50,50,0.9);
-            color: white;
-        }
-
-        body.dark-mode .btn:active {
-            background: rgba(50,50,50,0.7);
-        }
-
-        /* Instructions */
-        .instructions {
-            position: fixed;
-            bottom: 120px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 15px 25px;
-            border-radius: 25px;
-            font-size: 14px;
-            z-index: 5;
-            text-align: center;
-            max-width: 80%;
-            pointer-events: none;
+        /* Estilo para el modo oscuro por defecto */
+        .dark-mode {
+            background-color: #1a1a1a;
+            color: #f3f4f6;
         }
     </style>
 </head>
-<body>
-    <!-- Camera Video -->
-    <video id="video" playsinline autoplay muted></video>
 
-    <!-- Three.js Canvas -->
-    <canvas id="canvas"></canvas>
+<body class="dark-mode">
 
-    <!-- Reticle -->
-    <div class="reticle" id="reticle"></div>
+    <!-- 1. Video Background (Cámara) para simulación AR -->
+    <video id="video-background" autoplay playsinline></video>
 
-    <!-- Instructions -->
-    <div class="instructions" id="instructions">
-        Tap screen to place model
+    <!-- 2. Contenedor del Canvas de Three.js -->
+    <div id="canvas-container" class="absolute inset-0 z-20">
+        <canvas id="ar-canvas"></canvas>
     </div>
 
-    <!-- Top Bar -->
-    <div class="ui-container top-bar">
-        <button class="btn btn-icon" id="arToggle">📷</button>
-        <button class="btn btn-icon" id="themeToggle">🌙</button>
-    </div>
+    <!-- 3. Pantalla de Galería (Inicial) -->
+    <div id="gallery-screen" class="absolute inset-0 z-50 p-4 overflow-y-auto dark-mode transition-opacity duration-500">
+        <div class="max-w-7xl mx-auto">
+            <h1 class="text-4xl font-extrabold mb-8 text-center pt-8">ArtAR Viewer</h1>
+            <p class="text-center mb-10 text-gray-400">Selecciona una obra para visualizarla en tu espacio real (simulación AR).</p>
 
-    <!-- Bottom Panel -->
-    <div class="ui-container bottom-panel">
-        <div class="model-selector" id="modelSelector"></div>
-        
-        <div class="controls" id="controls">
-            <div class="control-group">
-                <label>Scale</label>
-                <input type="range" id="scaleSlider" min="0.1" max="3" step="0.1" value="1">
-            </div>
-            <div class="control-group">
-                <label>Rotation Y</label>
-                <input type="range" id="rotationSlider" min="0" max="360" step="1" value="0">
-            </div>
-            <div class="control-group">
-                <label>Height</label>
-                <input type="range" id="heightSlider" min="-2" max="2" step="0.1" value="0">
-            </div>
-            <div class="button-row">
-                <button class="btn" id="relocateBtn">📍 Relocate</button>
-                <button class="btn" id="resetBtn">🔄 Reset</button>
+            <!-- Grid de Obras -->
+            <div id="art-gallery" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-12">
+                <!-- Las tarjetas de arte se insertarán aquí por JS -->
             </div>
         </div>
+    </div>
 
-        <button class="btn btn-primary" id="controlsToggle" style="width: 100%;">
-            ⚙️ Controls
+    <!-- 4. Controles Flotantes para Modo AR -->
+    <div id="ar-controls" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex flex-wrap justify-center space-x-2 md:space-x-4 p-2 bg-gray-900/70 backdrop-blur-sm rounded-xl transition-opacity duration-300 opacity-0 pointer-events-none">
+
+        <!-- Botón Volver/Cambiar Obra -->
+        <button id="btn-back" class="p-3 md:p-4 text-white bg-red-600 hover:bg-red-700 rounded-full shadow-lg transition duration-150 transform hover:scale-105" title="Volver a Galería">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gallery-vertical-end"><path d="M7 2h10"/><path d="M10 6h4"/><path d="M5 10h14"/><path d="M8 14h8"/><path d="M3 18h18"/><path d="M11 22h2"/></svg>
+        </button>
+
+        <!-- Botón Escalar -->
+        <button id="btn-scale" data-mode="scale" class="p-3 md:p-4 text-white bg-blue-600 hover:bg-blue-700 rounded-full shadow-lg transition duration-150 transform hover:scale-105 active-mode" title="Modo Escala (Pinch)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize-2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><path d="M21 3 14 10"/><path d="M3 21 10 14"/></svg>
+        </button>
+
+        <!-- Botón Mover -->
+        <button id="btn-move" data-mode="move" class="p-3 md:p-4 text-white bg-yellow-600 hover:bg-yellow-700 rounded-full shadow-lg transition duration-150 transform hover:scale-105" title="Modo Mover (Arrastrar)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-move-horizontal"><polyline points="18 8 22 12 18 16"/><polyline points="6 8 2 12 6 16"/><line x1="2" x2="22" y1="12" y2="12"/></svg>
+        </button>
+
+        <!-- Botón Rotar -->
+        <button id="btn-rotate" data-mode="rotate" class="p-3 md:p-4 text-white bg-green-600 hover:bg-green-700 rounded-full shadow-lg transition duration-150 transform hover:scale-105" title="Modo Rotar (Arrastrar)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-3d"><path d="M5.768 18.066a7.957 7.957 0 0 1-2.094-1.244"/><path d="M8.258 20.354a7.957 7.957 0 0 0 4.74-1.424"/><path d="M10.95 21.9a7.957 7.957 0 0 0 1.01-1.285"/><path d="M13.682 20.353a7.957 7.957 0 0 0 4.74-1.424"/><path d="M18.232 18.066a7.957 7.957 0 0 0 2.094-1.244"/><path d="M21.572 13.9a7.957 7.957 0 0 0 .096-1.549"/><path d="M21.5 12.001c0-4.418-3.582-7.999-8-7.999S5.5 7.583 5.5 12.001"/><path d="M5.628 13.901a7.957 7.957 0 0 1-.096-1.55"/><path d="M4.328 16.829a7.957 7.957 0 0 1-1.07-1.353"/><path d="M1.002 12.593a7.957 7.957 0 0 1 1.07-1.353"/><circle cx="12" cy="12" r="10"/></svg>
+        </button>
+
+        <!-- Botón Captura/Guardar -->
+        <button id="btn-capture" class="p-3 md:p-4 text-white bg-gray-500 hover:bg-gray-600 rounded-full shadow-lg transition duration-150 transform hover:scale-105" title="Guardar Captura">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-camera"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
         </button>
     </div>
 
-    <!-- Notification -->
-    <div class="notification" id="notification"></div>
-
-    <!-- Permission Overlay -->
-    <div class="permission-overlay" id="permissionOverlay">
-        <div class="permission-content">
-            <h2>Motion Sensors Required</h2>
-            <p>This AR experience needs access to your device motion sensors for the best experience.</p>
-            <button class="btn btn-primary" id="requestPermission" style="width: 100%;">
-                Enable Motion Tracking
-            </button>
-        </div>
+    <!-- 5. Mensaje Flotante (Para Captura o Errores) -->
+    <div id="message-box" class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 p-3 rounded-lg shadow-xl z-[100] transition-all duration-300 opacity-0 pointer-events-none">
+        Mensaje
     </div>
 
-    <!-- Loading -->
-    <div class="loading" id="loading">
-        <div class="spinner"></div>
-        <div>Loading AR Experience...</div>
-    </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-        // ============================================
-        // GLOBAL STATE & CONFIGURATION
-        // ============================================
-        
-        const state = {
-            arMode: false,
-            motionEnabled: false,
-            modelPlaced: false,
-            selectedModel: 'duck',
-            currentModel: null,
-            isDragging: false,
-            isRelocating: false,
-            initialPinchDistance: 0,
-            initialScale: 1
-        };
+<script>
+    // --- Configuración y Datos Iniciales ---
+    const ARTWORKS = [
+        { id: 'sunflower', name: 'Girasoles', artist: 'Vincent van Gogh', url: 'https://placehold.co/600x900/402830/ffffff?text=Girasoles' },
+        { id: 'scream', name: 'El Grito', artist: 'Edvard Munch', url: 'https://placehold.co/600x700/606060/ffffff?text=El+Grito' },
+        { id: 'starry', name: 'Noche Estrellada', artist: 'Vincent van Gogh', url: 'https://placehold.co/1000x800/202050/ffffff?text=Noche+Estrellada' },
+        { id: 'monalisa', name: 'Mona Lisa', artist: 'Leonardo da Vinci', url: 'https://placehold.co/600x900/7a574a/ffffff?text=Mona+Lisa' },
+        { id: 'guernica', name: 'Guernica', artist: 'Pablo Picasso', url: 'https://placehold.co/1600x700/303030/ffffff?text=Guernica' },
+    ];
 
-        const models = [
-            { id: 'duck', name: '🦆 Duck', url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb' },
-            { id: 'helmet', name: '⛑️ Helmet', url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb' },
-            { id: 'boombox', name: '📻 BoomBox', url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/BoomBox/glTF-Binary/BoomBox.glb' }
-        ];
+    // --- Variables Globales de Three.js y Estado ---
+    let scene, camera, renderer, controls;
+    let artObject, currentArtwork, textureLoader;
+    let cameraStream = null;
 
-        // ============================================
-        // THREE.JS SCENE SETUP
-        // ============================================
-        
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ 
-            canvas: document.getElementById('canvas'), 
-            antialias: true, 
-            alpha: true 
-        });
-        
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Estado de Interacción Táctil
+    const interaction = {
+        mode: 'move', // 'move', 'scale', 'rotate'
+        isDragging: false,
+        prevTouch: { x: 0, y: 0 },
+        prevDistance: 0,
+        initialObjectPosition: new THREE.Vector3()
+    };
 
-        camera.position.set(0, 1.6, 0);
+    // --- Funciones de Utilidad ---
 
-        // ============================================
-        // LIGHTING SETUP
-        // ============================================
-        
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
+    /** Muestra un mensaje temporal flotante. */
+    function showMessage(text, duration = 3000) {
+        const msgBox = document.getElementById('message-box');
+        msgBox.textContent = text;
+        msgBox.classList.remove('opacity-0', 'pointer-events-none');
+        msgBox.classList.add('opacity-100');
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(5, 10, 5);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 1024;
-        directionalLight.shadow.mapSize.height = 1024;
-        directionalLight.shadow.camera.near = 0.1;
-        directionalLight.shadow.camera.far = 50;
-        directionalLight.shadow.camera.left = -10;
-        directionalLight.shadow.camera.right = 10;
-        directionalLight.shadow.camera.top = 10;
-        directionalLight.shadow.camera.bottom = -10;
+        setTimeout(() => {
+            msgBox.classList.remove('opacity-100');
+            msgBox.classList.add('opacity-0', 'pointer-events-none');
+        }, duration);
+    }
+
+    /** Muestra la galería y oculta el visor AR. */
+    function showGalleryView() {
+        document.getElementById('gallery-screen').classList.remove('opacity-0', 'pointer-events-none');
+        document.getElementById('ar-controls').classList.add('opacity-0', 'pointer-events-none');
+        document.getElementById('video-background').style.display = 'none';
+
+        if (artObject) scene.remove(artObject);
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+        // Limpia el canvas si es necesario (opcional)
+        if (renderer) renderer.clear();
+    }
+
+    /** Muestra el visor AR y oculta la galería. */
+    function showARView() {
+        document.getElementById('gallery-screen').classList.add('opacity-0', 'pointer-events-none');
+        document.getElementById('ar-controls').classList.remove('opacity-0', 'pointer-events-none');
+        document.getElementById('video-background').style.display = 'block';
+    }
+
+
+    // --- Three.js y AR Core ---
+
+    /** Inicializa la escena 3D y el renderer. */
+    function initThree() {
+        const canvas = document.getElementById('ar-canvas');
+        const container = document.getElementById('canvas-container');
+
+        // Escena y Luces
+        scene = new THREE.Scene();
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        directionalLight.position.set(5, 10, 7.5);
         scene.add(directionalLight);
 
-        // ============================================
-        // SHADOW PLANE (Invisible plane for shadows)
-        // ============================================
-        
-        const shadowPlaneGeometry = new THREE.PlaneGeometry(100, 100);
-        const shadowPlaneMaterial = new THREE.ShadowMaterial({ opacity: 0.3 });
-        const shadowPlane = new THREE.Mesh(shadowPlaneGeometry, shadowPlaneMaterial);
-        shadowPlane.rotation.x = -Math.PI / 2;
-        shadowPlane.position.y = 0;
-        shadowPlane.receiveShadow = true;
-        scene.add(shadowPlane);
+        // Cámara (Configurada para AR, alto FOV y cerca del origen)
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 0, 3); // Posición inicial para ver el cuadro
 
-        // ============================================
-        // MODEL LOADING
-        // ============================================
-        
-        const loader = new THREE.GLTFLoader();
-        const loadedModels = {};
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.outputEncoding = THREE.sRGBEncoding;
 
-        async function loadModel(modelInfo) {
-            if (loadedModels[modelInfo.id]) {
-                return loadedModels[modelInfo.id].clone();
-            }
+        // Loader
+        textureLoader = new THREE.TextureLoader();
 
-            return new Promise((resolve, reject) => {
-                loader.load(
-                    modelInfo.url,
-                    (gltf) => {
-                        const model = gltf.scene;
-                        model.traverse((node) => {
-                            if (node.isMesh) {
-                                node.castShadow = true;
-                                node.receiveShadow = true;
-                            }
-                        });
+        window.addEventListener('resize', onWindowResize);
+    }
 
-                        // Center and scale model
-                        const box = new THREE.Box3().setFromObject(model);
-                        const center = box.getCenter(new THREE.Vector3());
-                        const size = box.getSize(new THREE.Vector3());
-                        const maxDim = Math.max(size.x, size.y, size.z);
-                        const scale = 1.5 / maxDim;
-                        
-                        model.position.sub(center);
-                        model.scale.setScalar(scale);
+    /** Maneja el redimensionamiento de la ventana. */
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
 
-                        loadedModels[modelInfo.id] = model;
-                        resolve(model.clone());
-                    },
-                    undefined,
-                    reject
-                );
-            });
+    /** Inicia la transmisión de video de la cámara. */
+    function startCameraFeed() {
+        const video = document.getElementById('video-background');
+
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
         }
 
-        // ============================================
-        // AR CAMERA SETUP
-        // ============================================
-        
-        const video = document.getElementById('video');
-
-        async function startCamera() {
-            try {
-                const constraints = {
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    }
-                };
-
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }) // 'environment' para cámara trasera
+            .then(stream => {
+                cameraStream = stream;
                 video.srcObject = stream;
-                video.style.display = 'block';
-                return true;
-            } catch (err) {
-                console.error('Camera error:', err);
-                showNotification('Camera access denied');
-                return false;
+                video.play();
+                showMessage('Cámara activada. Coloca la obra en tu espacio.');
+            })
+            .catch(err => {
+                console.error("Error al acceder a la cámara:", err);
+                showMessage('Error: No se pudo acceder a la cámara para la simulación AR.', 5000);
+            });
+    }
+
+    /** Carga la obra 3D con su textura y la añade a la escena. */
+    function loadArtwork(artwork) {
+        if (artObject) scene.remove(artObject);
+        currentArtwork = artwork;
+
+        // Carga de textura
+        textureLoader.load(artwork.url,
+            // Callback de éxito
+            (texture) => {
+                // Ajustar el aspecto del plano a la imagen
+                const aspectRatio = texture.image.width / texture.image.height;
+                const height = 2; // Altura fija del cuadro en el mundo 3D
+                const width = height * aspectRatio;
+
+                // 1. Crear la Malla del Arte (el cuadro en sí)
+                const artGeometry = new THREE.PlaneGeometry(width, height);
+                const artMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+                const artMesh = new THREE.Mesh(artGeometry, artMaterial);
+                artMesh.position.z = 0.025; // Pequeño desplazamiento para que no toque el marco
+
+                // 2. Crear el Marco (BoxGeometry)
+                const frameThickness = 0.05;
+                const frameGeometry = new THREE.BoxGeometry(
+                    width + frameThickness * 2,
+                    height + frameThickness * 2,
+                    frameThickness
+                );
+                const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.2 });
+                const frameMesh = new THREE.Mesh(frameGeometry, frameMaterial);
+
+                // 3. Crear el Objeto Contenedor
+                artObject = new THREE.Group();
+                artObject.add(frameMesh);
+                artObject.add(artMesh);
+
+                // Posición inicial: Flotando un poco más lejos
+                artObject.position.set(0, 0, -2);
+                artObject.scale.set(1, 1, 1); // Escala inicial
+                scene.add(artObject);
+
+                showARView();
+                startCameraFeed();
+                interaction.initialObjectPosition.copy(artObject.position);
+
+            },
+            // Callback de progreso (opcional)
+            undefined,
+            // Callback de error
+            (err) => {
+                console.error('Error al cargar la textura de la obra:', err);
+                showMessage('Error al cargar la obra. Inténtalo de nuevo.', 5000);
             }
-        }
+        );
+    }
 
-        function stopCamera() {
-            if (video.srcObject) {
-                video.srcObject.getTracks().forEach(track => track.stop());
-                video.srcObject = null;
-                video.style.display = 'none';
+    /** Loop de animación de Three.js. */
+    function animate() {
+        requestAnimationFrame(animate);
+        if (renderer) renderer.render(scene, camera);
+    }
+
+
+    // --- Interacciones Táctiles (Gestos) ---
+
+    function handleTouchStart(event) {
+        if (!artObject || event.touches.length === 0) return;
+
+        interaction.isDragging = true;
+        interaction.prevTouch.x = event.touches[0].clientX;
+        interaction.prevTouch.y = event.touches[0].clientY;
+
+        if (event.touches.length === 2) {
+            interaction.prevDistance = getDistance(event.touches[0], event.touches[1]);
+        }
+    }
+
+    function handleTouchMove(event) {
+        if (!artObject || !interaction.isDragging) return;
+
+        // Escala (Pinch/Zoom)
+        if (event.touches.length === 2 && interaction.mode === 'scale') {
+            const currentDistance = getDistance(event.touches[0], event.touches[1]);
+            const deltaDistance = currentDistance - interaction.prevDistance;
+
+            // Ajustar el factor de escala basado en el delta
+            const scaleFactor = 0.005;
+            const newScale = artObject.scale.x + deltaDistance * scaleFactor;
+
+            // Limitar la escala
+            const clampedScale = Math.min(Math.max(0.2, newScale), 5.0);
+            artObject.scale.set(clampedScale, clampedScale, clampedScale);
+
+            interaction.prevDistance = currentDistance;
+            showMessage(`Escala: ${clampedScale.toFixed(1)}x`, 1000);
+
+        }
+        // Movimiento o Rotación (1 dedo)
+        else if (event.touches.length === 1) {
+            const dx = event.touches[0].clientX - interaction.prevTouch.x;
+            const dy = event.touches[0].clientY - interaction.prevTouch.y;
+
+            if (interaction.mode === 'move') {
+                // Mover (X e Y de la pantalla mapeados a X y Z del mundo 3D)
+                // Usamos la cámara para determinar la dirección de movimiento
+                const moveSpeed = 0.005;
+                const cameraDirection = new THREE.Vector3();
+                camera.getWorldDirection(cameraDirection);
+
+                // Movimiento horizontal (eje X del mundo)
+                const sideVector = new THREE.Vector3().crossVectors(cameraDirection, camera.up).normalize();
+                artObject.position.add(sideVector.multiplyScalar(-dx * moveSpeed));
+
+                // Movimiento vertical (eje Y del mundo)
+                // Se podría mapear 'dy' a mover el objeto hacia/lejos (Z), pero es más intuitivo
+                // que mueva el objeto hacia arriba/abajo (Y del mundo).
+                artObject.position.y -= dy * moveSpeed;
+
+                showMessage('Moviendo Obra (X, Y, Z)', 1000);
+            } else if (interaction.mode === 'rotate') {
+                // Rotar (solo eje Y del mundo)
+                const rotateSpeed = 0.01;
+                artObject.rotation.y += dx * rotateSpeed;
+                showMessage('Rotando Obra (Y-axis)', 1000);
             }
+
+            interaction.prevTouch.x = event.touches[0].clientX;
+            interaction.prevTouch.y = event.touches[0].clientY;
+        }
+    }
+
+    function handleTouchEnd(event) {
+        if (event.touches.length === 0) {
+            interaction.isDragging = false;
+        }
+        // Si hay toques restantes, actualiza la posición inicial
+        if (event.touches.length === 1) {
+            interaction.prevTouch.x = event.touches[0].clientX;
+            interaction.prevTouch.y = event.touches[0].clientY;
+        }
+    }
+
+    /** Calcula la distancia entre dos toques para escalado. */
+    function getDistance(touch1, touch2) {
+        const dx = touch1.clientX - touch2.clientX;
+        const dy = touch1.clientY - touch2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+
+    // --- Inicialización de la Galería y UI ---
+
+    /** Genera las tarjetas de la galería a partir del array ARTWORKS. */
+    function generateGalleryCards() {
+        const galleryContainer = document.getElementById('art-gallery');
+        galleryContainer.innerHTML = ARTWORKS.map(art => `
+            <div id="card-${art.id}" data-art-id="${art.id}" class="gallery-card bg-gray-800 rounded-xl overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl">
+                <div class="h-64 flex items-center justify-center bg-gray-700">
+                    <img src="${art.url}" alt="${art.name}" class="h-full w-full object-cover p-4 opacity-70 transition duration-300 hover:opacity-100">
+                </div>
+                <div class="p-4">
+                    <h3 class="text-xl font-semibold text-white truncate">${art.name}</h3>
+                    <p class="text-sm text-gray-400">${art.artist}</p>
+                </div>
+            </div>
+        `).join('');
+
+        // Añadir listeners a las tarjetas
+        ARTWORKS.forEach(art => {
+            document.getElementById(`card-${art.id}`).addEventListener('click', () => {
+                const selectedArt = ARTWORKS.find(a => a.id === art.id);
+                if (selectedArt) {
+                    loadArtwork(selectedArt);
+                }
+            });
+        });
+    }
+
+    /** Configura los listeners de los botones de control en modo AR. */
+    function setupARControls() {
+        document.getElementById('btn-back').addEventListener('click', showGalleryView);
+        document.getElementById('btn-capture').addEventListener('click', captureCanvas);
+
+        // Listeners para cambiar el modo de interacción
+        document.querySelectorAll('#ar-controls button').forEach(button => {
+            const mode = button.getAttribute('data-mode');
+            if (mode) {
+                button.addEventListener('click', () => {
+                    interaction.mode = mode;
+                    showMessage(`Modo cambiado a: ${mode.toUpperCase()}`, 1500);
+
+                    // Resaltar el botón activo
+                    document.querySelectorAll('#ar-controls button').forEach(b => b.classList.remove('ring-4', 'ring-offset-2', 'ring-opacity-50', 'ring-white'));
+                    button.classList.add('ring-4', 'ring-offset-2', 'ring-opacity-50', 'ring-white');
+                });
+            }
+        });
+
+        // Inicializar el botón de modo 'move' como activo
+        document.getElementById('btn-move').click();
+    }
+
+    /** Captura el canvas y el video de fondo como una sola imagen. */
+    function captureCanvas() {
+        if (!renderer || !artObject) {
+            showMessage("No hay obra cargada para capturar.", 2000);
+            return;
         }
 
-        // ============================================
-        // DEVICE ORIENTATION CONTROLS
-        // ============================================
-        
-        let deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
-        let screenOrientation = 0;
+        const video = document.getElementById('video-background');
+        const canvas = document.getElementById('ar-canvas');
 
-        function handleOrientation(e) {
-            if (!state.motionEnabled || !state.modelPlaced) return;
-            
-            deviceOrientation.alpha = e.alpha || 0;
-            deviceOrientation.beta = e.beta || 0;
-            deviceOrientation.gamma = e.gamma || 0;
-        }
+        // Crear un canvas temporal más grande para combinar
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = canvas.width;
+        finalCanvas.height = canvas.height;
+        const ctx = finalCanvas.getContext('2d');
 
-        function handleScreenOrientation() {
-            screenOrientation = window.orientation || 0;
-        }
+        // 1. Dibujar el fotograma actual del video
+        ctx.drawImage(video, 0, 0, finalCanvas.width, finalCanvas.height);
 
-        async function requestMotionPermission() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && 
-                typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permission = await DeviceOrientationEvent.requestPermission();
-                    if (permission === 'granted') {
-                        enableMotionTracking();
-                        document.getElementById('permissionOverlay').style.display = 'none';
+        // 2. Dibujar el contenido del canvas de Three.js encima
+        ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+
+        // 3. Crear el enlace de descarga
+        const link = document.createElement('a');
+        link.download = `artAR_capture_${currentArtwork.id || 'image'}_${Date.now()}.png`;
+        link.href = finalCanvas.toDataURL('image/png');
+        link.click();
+
+        showMessage('Captura guardada con éxito.', 3000);
+    }
+
+    /** Función principal de inicialización de la aplicación. */
+    window.onload = function() {
+        initThree();
+        animate();
+        generateGalleryCards();
+        setupARControls();
+
+        // Configurar Eventos Táctiles en el Canvas
+        const canvas = document.getElementById('ar-canvas');
+        canvas.addEventListener('touchstart', handleTouchStart, false);
+        canvas.addEventListener('touchmove', handleTouchMove, false);
+        canvas.addEventListener('touchend', handleTouchEnd, false);
+
+        // Para escritorio (simulación con OrbitControls, aunque no requerido, mejora el debug)
+        if (!('ontouchstart' in window)) {
+            // Permite rotación de cámara con OrbitControls en escritorio
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableZoom = true;
+            controls.enableDamping = true;
+            controls.update();
+
+            // Mapeo básico de ratón para mover/rotar el objeto
+            canvas.addEventListener('mousedown', (e) => {
+                interaction.isDragging = true;
+                interaction.prevTouch.x = e.clientX;
+                interaction.prevTouch.y = e.clientY;
+            });
+            canvas.addEventListener('mousemove', (e) => {
+                if (interaction.isDragging && artObject) {
+                    const dx = e.clientX - interaction.prevTouch.x;
+                    if (interaction.mode === 'rotate') {
+                        artObject.rotation.y += dx * 0.01;
                     }
-                } catch (err) {
-                    console.error('Permission denied:', err);
-                    showNotification('Motion permission denied');
+                    interaction.prevTouch.x = e.clientX;
                 }
-            } else {
-                enableMotionTracking();
-                document.getElementById('permissionOverlay').style.display = 'none';
-            }
+            });
+            canvas.addEventListener('mouseup', () => { interaction.isDragging = false; });
         }
 
-        function enableMotionTracking() {
-            state.motionEnabled = true;
-            window.addEventListener('deviceorientation', handleOrientation, true);
-            window.addEventListener('orientationchange', handleScreenOrientation, true);
-            showNotification('Motion tracking enabled');
-        }
+        // Mostrar la galería al inicio
+        showGalleryView();
+    };
+</script>
 
-        // ============================================
-        // MODEL PLACEMENT & POSITIONING
-        // ============================================
-        
-        async function placeModel() {
-            if (state.modelPlaced && !state.isRelocating) return;
-
-            const modelInfo = models.find(m => m.id === state.selectedModel);
-            
-            try {
-                showLoading(true);
-                
-                // Remove existing model
-                if (state.currentModel) {
-                    scene.remove(state.currentModel);
-                }
-
-                // Load new model
-                const model = await loadModel(modelInfo);
-                
-                // Place model in front of camera
-                const distance = 2;
-                const direction = new THREE.Vector3(0, 0, -1);
-                direction.applyQuaternion(camera.quaternion);
-                
-                const position = camera.position.clone().add(direction.multiplyScalar(distance));
-                position.y = 0; // Place on ground
-                
-                model.position.copy(position);
-                model.visible = true;
-
-                scene.add(model);
-                state.currentModel = model;
-                state.modelPlaced = true;
-                state.isRelocating = false;
-
-                document.getElementById('reticle').style.display = 'none';
-                document.getElementById('instructions').style.display = 'none';
-                
-                showNotification(`${modelInfo.name} placed!`);
-                showLoading(false);
-            } catch (err) {
-                console.error('Error placing model:', err);
-                showNotification('Error loading model');
-                showLoading(false);
-            }
-        }
-
-        function resetModel() {
-            if (state.currentModel) {
-                scene.remove(state.currentModel);
-                state.currentModel = null;
-                state.modelPlaced = false;
-                document.getElementById('reticle').style.display = 'block';
-                document.getElementById('instructions').style.display = 'block';
-                document.getElementById('scaleSlider').value = 1;
-                document.getElementById('rotationSlider').value = 0;
-                document.getElementById('heightSlider').value = 0;
-                showNotification('Model reset');
-            }
-        }
-
-        // ============================================
-        // TOUCH GESTURES
-        // ============================================
-        
-        let touchStartPos = { x: 0, y: 0 };
-        let lastTouchTime = 0;
-
-        function getTouchDistance(touches) {
-            const dx = touches[0].clientX - touches[1].clientX;
-            const dy = touches[0].clientY - touches[1].clientY;
-            return Math.sqrt(dx * dx + dy * dy);
-        }
-
-        function handleTouchStart(e) {
-            if (e.touches.length === 1) {
-                touchStartPos.x = e.touches[0].clientX;
-                touchStartPos.y = e.touches[0].clientY;
-                
-                // Double tap detection
-                const now = Date.now();
-                if (now - lastTouchTime < 300) {
-                    placeModel();
-                }
-                lastTouchTime = now;
-                
-                state.isDragging = true;
-            } else if (e.touches.length === 2 && state.modelPlaced) {
-                state.initialPinchDistance = getTouchDistance(e.touches);
-                state.initialScale = state.currentModel.scale.x;
-            }
-        }
-
-        function handleTouchMove(e) {
-            e.preventDefault();
-
-            if (e.touches.length === 1 && state.isDragging && state.modelPlaced) {
-                const deltaX = e.touches[0].clientX - touchStartPos.x;
-                state.currentModel.rotation.y += deltaX * 0.01;
-                touchStartPos.x = e.touches[0].clientX;
-            } else if (e.touches.length === 2 && state.modelPlaced) {
-                const currentDistance = getTouchDistance(e.touches);
-                const scale = (currentDistance / state.initialPinchDistance) * state.initialScale;
-                state.currentModel.scale.setScalar(Math.max(0.1, Math.min(3, scale)));
-                document.getElementById('scaleSlider').value = state.currentModel.scale.x;
-            }
-        }
-
-        function handleTouchEnd(e) {
-            state.isDragging = false;
-        }
-
-        // ============================================
-        // UI CONTROLS
-        // ============================================
-        
-        function showNotification(message) {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.classList.add('show');
-            setTimeout(() => notification.classList.remove('show'), 2000);
-        }
-
-        function showLoading(show) {
-            document.getElementById('loading').style.display = show ? 'block' : 'none';
-        }
-
-        function updateSliders() {
-            if (!state.currentModel) return;
-
-            const scale = parseFloat(document.getElementById('scaleSlider').value);
-            const rotation = parseFloat(document.getElementById('rotationSlider').value);
-            const height = parseFloat(document.getElementById('heightSlider').value);
-
-            state.currentModel.scale.setScalar(scale);
-            state.currentModel.rotation.y = rotation * Math.PI / 180;
-            state.currentModel.position.y = height;
-        }
-
-        // ============================================
-        // UI EVENT LISTENERS
-        // ============================================
-        
-        // Model selector
-        const modelSelector = document.getElementById('modelSelector');
-        models.forEach(model => {
-            const card = document.createElement('div');
-            card.className = 'model-card' + (model.id === state.selectedModel ? ' active' : '');
-            card.innerHTML = `<span>${model.name}</span>`;
-            card.onclick = () => {
-                document.querySelectorAll('.model-card').forEach(c => c.classList.remove('active'));
-                card.classList.add('active');
-                state.selectedModel = model.id;
-                if (state.modelPlaced) {
-                    placeModel();
-                }
-            };
-            modelSelector.appendChild(card);
-        });
-
-        // Controls toggle
-        document.getElementById('controlsToggle').onclick = () => {
-            const controls = document.getElementById('controls');
-            controls.classList.toggle('show');
-        };
-
-        // Sliders
-        document.getElementById('scaleSlider').oninput = updateSliders;
-        document.getElementById('rotationSlider').oninput = updateSliders;
-        document.getElementById('heightSlider').oninput = updateSliders;
-
-        // Relocate button
-        document.getElementById('relocateBtn').onclick = () => {
-            state.isRelocating = true;
-            document.getElementById('reticle').style.display = 'block';
-            document.getElementById('instructions').textContent = 'Tap to relocate model';
-            document.getElementById('instructions').style.display = 'block';
-            showNotification('Move phone and tap to relocate');
-        };
-
-        // Reset button
-        document.getElementById('resetBtn').onclick = resetModel;
-
-        // AR toggle
-        document.getElementById('arToggle').onclick = async () => {
-            state.arMode = !state.arMode;
-            if (state.arMode) {
-                await startCamera();
-                renderer.setClearAlpha(0);
-                
-                // Request motion permission for iOS
-                if (typeof DeviceOrientationEvent !== 'undefined' && 
-                    typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    document.getElementById('permissionOverlay').style.display = 'flex';
-                } else {
-                    enableMotionTracking();
-                }
-                
-                showNotification('AR Mode enabled');
-            } else {
-                stopCamera();
-                renderer.setClearAlpha(1);
-                state.motionEnabled = false;
-                showNotification('AR Mode disabled');
-            }
-        };
-
-        // Theme toggle
-        document.getElementById('themeToggle').onclick = () => {
-            document.body.classList.toggle('dark-mode');
-            const icon = document.getElementById('themeToggle');
-            icon.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
-        };
-
-        // Permission request
-        document.getElementById('requestPermission').onclick = requestMotionPermission;
-
-        // Touch events
-        const canvas = document.getElementById('canvas');
-        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-
-        // ============================================
-        // ANIMATION LOOP
-        // ============================================
-        
-        function animate() {
-            requestAnimationFrame(animate);
-
-            // Apply device orientation to camera if motion enabled and model placed
-            if (state.motionEnabled && state.modelPlaced) {
-                const alpha = THREE.MathUtils.degToRad(deviceOrientation.alpha);
-                const beta = THREE.MathUtils.degToRad(deviceOrientation.beta);
-                const gamma = THREE.MathUtils.degToRad(deviceOrientation.gamma);
-                const orient = THREE.MathUtils.degToRad(screenOrientation);
-
-                camera.rotation.set(beta - Math.PI/2, alpha, -gamma, 'YXZ');
-                camera.rotation.z += orient;
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        // ============================================
-        // WINDOW RESIZE
-        // ============================================
-        
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        // ============================================
-        // INITIALIZATION
-        // ============================================
-        
-        async function init() {
-            showLoading(true);
-            
-            // Preload first model
-            try {
-                await loadModel(models[0]);
-                showLoading(false);
-                showNotification('Ready! Select a model and tap to place');
-            } catch (err) {
-                console.error('Init error:', err);
-                showLoading(false);
-                showNotification('Error initializing');
-            }
-            
-            animate();
-        }
-
-        init();
-    </script>
 </body>
 </html>
