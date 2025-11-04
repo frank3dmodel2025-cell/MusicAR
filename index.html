@@ -1,228 +1,150 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visor AR Nativo - Galería de Modelos</title>
-    <!-- Script para importar el componente Model-viewer de Google -->
-    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-    <!-- Carga de Tailwind CSS para un diseño limpio y moderno -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Visor AR Nativo con model-viewer</title>
+
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
+    <!-- Fuente Poppins -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
+
+    <!-- Componente model-viewer de Google (MANDATORIO para AR nativa) -->
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
     <style>
-        /* Estilos base */
-        body {
-            font-family: 'Inter', sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f0f4f8;
-            overflow: hidden;
-        }
-
-        /* Contenedor del Visor 3D */
-        #model-container {
-            width: 100vw;
-            height: 90vh; /* Altura principal para el visor */
-        }
-
-        /* Estilo para el componente principal model-viewer */
-        model-viewer {
-            width: 100%;
-            height: 100%;
-            background-color: #e2e8f0;
-            border: none;
-        }
-
-        /* Estilos para el botón AR */
-        #ar-button {
-            /* Colocación y estilo del botón flotante */
-            position: absolute;
-            right: 20px;
-            bottom: 20px;
-            
-            background-color: #10b981; /* Verde esmeralda de Tailwind */
-            color: white;
-            border: none;
-            border-radius: 9999px; /* Píldora redondeada */
-            padding: 12px 24px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-            transition: all 0.2s ease;
-            z-index: 10;
-        }
-
-        #ar-button:hover {
-            background-color: #059669;
-            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.6);
-        }
-        
-        /* Estilos para el menú de modelos */
-        #model-selector {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 10vh; /* Altura para el menú */
-            background-color: #ffffff;
-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
-            padding: 0 1rem;
-        }
-
-        .model-btn {
-            background-color: #ffffff;
-            color: #1f2937;
-            border: 2px solid #d1d5db;
-            padding: 8px 16px;
-            margin: 0 8px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-weight: 500;
-        }
-
-        .model-btn.active, .model-btn:hover {
-            background-color: #3b82f6; /* Azul */
-            color: white;
-            border-color: #3b82f6;
-        }
-        
-        /* Ajuste para móviles */
-        @media (max-width: 640px) {
-            #ar-button {
-                padding: 10px 18px;
-                font-size: 0.875rem;
-                right: 10px;
-                bottom: 10px;
-            }
-            #model-selector {
-                height: auto;
-                padding: 10px 0;
-            }
-        }
-
+      body {
+        font-family: 'Poppins', sans-serif;
+        background-color: #f7f3ed;
+        color: #3b4233;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+      }
+      /* Estilos para el componente model-viewer */
+      model-viewer {
+        width: 100%;
+        height: 50vh; /* Ocupa mitad de la pantalla para el visor */
+        margin: 16px 0;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        background-color: #fff;
+      }
+      .container {
+        width: 95%;
+        max-width: 600px;
+        padding: 16px;
+      }
+      .glass-panel {
+        backdrop-filter: blur(10px) saturate(180%);
+        background-color: rgba(255, 255, 255, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.125);
+        box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
+      }
+      button {
+        transition: background-color 0.3s, transform 0.1s;
+      }
+      button:active {
+        transform: scale(0.98);
+      }
     </style>
 </head>
 <body>
 
-    <!-- Bar-Menu de Selección de Modelo -->
-    <div id="model-selector">
-        <button class="model-btn active" data-model="Duck">Pato</button>
-        <button class="model-btn" data-model="Helmet">Casco</button>
-        <button class="model-btn" data-model="BoomBox">BoomBox</button>
+  <div class="container">
+    <h1 class="text-3xl font-bold text-center text-indigo-800 my-6">Galería AR Nativa (model-viewer)</h1>
+
+    <!-- 
+      El componente model-viewer reemplaza toda la lógica de Three.js y el giroscopio.
+      Atributos clave para AR:
+      1. src: Ruta al modelo (siempre GLB o GLTF).
+      2. ar: Activa el modo AR.
+      3. ar-modes: Define los modos compatibles (webxr, scene-viewer, quick-look).
+      4. camera-controls: Permite rotación y zoom 3D.
+      5. shadow-intensity: Hace que el modelo se vea más realista.
+    -->
+    <model-viewer
+      id="model-viewer-element"
+      src="https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF/Duck.gltf"
+      ar
+      ar-modes="webxr scene-viewer quick-look"
+      camera-controls
+      shadow-intensity="1"
+      alt="Modelo 3D para Realidad Aumentada"
+      class="max-w-full mx-auto"
+    >
+      <!-- Botón AR automático que se muestra en dispositivos compatibles -->
+      <div slot="ar-button" class="flex justify-center items-center w-full h-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-full shadow-lg">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.55 4.55a.5.5 0 010 .71L15 20.81a.5.5 0 01-.81-.39V16h-4a2 2 0 01-2-2v-4a2 2 0 012-2h4V3.59a.5.5 0 01.81-.39L15 8l4.55 4.55a.5.5 0 010 .71z" />
+        </svg>
+        Ver en tu mundo (AR)
+      </div>
+    </model-viewer>
+
+    <!-- Panel de controles simplificado -->
+    <div class="glass-panel w-full">
+      <h2 class="text-xl font-bold mb-4 text-indigo-700">Seleccionar Modelo</h2>
+      <div id="model-selector" class="space-y-3">
+          <button class="px-4 py-2 rounded bg-indigo-500 text-white w-full" data-model="Duck">Pato (Duck)</button>
+          <button class="px-4 py-2 rounded bg-gray-200 w-full" data-model="Helmet">Casco (Helmet)</button>
+          <button class="px-4 py-2 rounded bg-gray-200 w-full" data-model="BoomBox">BoomBox</button>
+      </div>
+      <p class="text-sm text-gray-600 mt-4">Toca el modelo 3D para rotar/hacer zoom o el botón "Ver en tu mundo (AR)" para la Realidad Aumentada nativa de tu dispositivo.</p>
     </div>
+  </div>
 
-    <!-- Contenedor del Modelo 3D con model-viewer -->
-    <div id="model-container">
-        <!-- 
-            Usamos el modelo Duck como inicial. 
-            NOTA: Los modelos .usdz son NECESARIOS para la RA nativa en iOS (Quick Look).
-            Los modelos .glb son para visualización web y RA nativa en Android (WebXR).
-        -->
-        <model-viewer 
-            id="ar-viewer"
-            src="https://modelviewer.dev/shared-assets/models/Duck.glb"
-            ios-src="https://modelviewer.dev/shared-assets/models/Duck.usdz"
-            ar
-            camera-controls
-            touch-action="pan-y"
-            shadow-intensity="1"
-            alt="Modelo 3D para Realidad Aumentada"
-            exposure="1.2"
-            shadow-softness="0.5"
-            disable-tap="true"
-        >
-            <!-- Botón personalizado para iniciar la Realidad Aumentada -->
-            <button slot="ar-button" id="ar-button">
-                Ver en AR 🚀
-            </button>
-        </model-viewer>
-    </div>
+<script>
+  const modelViewer = document.getElementById('model-viewer-element');
+  const selector = document.getElementById('model-selector');
 
-    <script>
-        // Mapeo de nombres de modelo a sus URLs (usan los mismos modelos de ejemplo GLTF)
-        const MODELS = {
-            Duck: { 
-                glb: 'https://modelviewer.dev/shared-assets/models/Duck.glb',
-                usdz: 'https://modelviewer.dev/shared-assets/models/Duck.usdz',
-                alt: 'Pato de juguete 3D'
-            },
-            Helmet: { 
-                glb: 'https://modelviewer.dev/shared-assets/models/DamagedHelmet.glb',
-                usdz: 'https://modelviewer.dev/shared-assets/models/DamagedHelmet.usdz',
-                alt: 'Casco espacial dañado'
-            },
-            BoomBox: { 
-                glb: 'https://modelviewer.dev/shared-assets/models/BoomBox.glb',
-                usdz: 'https://modelviewer.dev/shared-assets/models/BoomBox.usdz',
-                alt: 'Radiograbadora 3D'
-            }
-        };
+  const MODELS = {
+    Duck: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF/Duck.gltf',
+    Helmet: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
+    BoomBox: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/BoomBox/glTF/BoomBox.gltf'
+  };
 
-        const viewer = document.getElementById('ar-viewer');
-        const modelButtons = document.querySelectorAll('.model-btn');
+  /**
+   * Updates the model-viewer source and button styles.
+   * @param {string} name The model name (e.g., 'Duck').
+   */
+  function selectModel(name){
+    const url = MODELS[name];
+    if(url){
+      modelViewer.src = url;
+      modelViewer.alt = `Modelo 3D de ${name}`;
 
-        // Función para cambiar el modelo activo
-        function changeModel(modelName) {
-            const modelData = MODELS[modelName];
-            
-            if (!modelData) return;
-
-            // 1. Actualiza la fuente del modelo para el visor
-            viewer.src = modelData.glb;
-            viewer.setAttribute('ios-src', modelData.usdz);
-            viewer.setAttribute('alt', modelData.alt);
-
-            // 2. Reinicia la cámara y animación (opcional, para refrescar la vista)
-            viewer.cameraOrbit = '0deg 75deg 105%';
-            viewer.fieldOfView = 'auto';
-
-            // 3. Actualiza los estilos de los botones para reflejar el modelo activo
-            modelButtons.forEach(btn => {
-                if (btn.getAttribute('data-model') === modelName) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            });
+      // Update button styles
+      selector.querySelectorAll('button').forEach(btn => {
+        if(btn.dataset.model === name){
+          btn.classList.remove('bg-gray-200', 'text-black');
+          btn.classList.add('bg-indigo-500', 'text-white');
+        } else {
+          btn.classList.remove('bg-indigo-500', 'text-white');
+          btn.classList.add('bg-gray-200', 'text-black');
         }
+      });
+    }
+  }
 
-        // Asigna el evento de click a todos los botones de modelo
-        modelButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const modelName = button.getAttribute('data-model');
-                changeModel(modelName);
-            });
-        });
+  // Event listener for model selector buttons
+  selector.addEventListener('click', (e) => {
+    if(e.target.tagName === 'BUTTON' && e.target.dataset.model){
+      selectModel(e.target.dataset.model);
+    }
+  });
 
-        // Inicializa el modelo al cargar la página (aunque ya está en el HTML, es buena práctica)
-        window.onload = () => {
-             // Pequeña corrección visual al cargar
-             viewer.cameraOrbit = '0deg 75deg 105%';
-        };
-        
-        // Manejo de errores de RA (en caso de que el dispositivo no sea compatible)
-        viewer.addEventListener('error', (event) => {
-            // Este evento se dispara si el modelo no puede cargarse o si hay un problema grave de AR.
-            console.error('Error en model-viewer:', event);
-        });
-
-        viewer.addEventListener('ar-status', (event) => {
-            if (event.detail.status === 'failed') {
-                // Notificación simple al usuario si AR falla
-                const arButton = document.getElementById('ar-button');
-                arButton.textContent = 'AR NO SOPORTADO';
-                arButton.style.backgroundColor = '#ef4444'; // Rojo de error
-                console.warn('Realidad Aumentada fallida. Asegúrate de usar un dispositivo compatible.');
-
-                setTimeout(() => {
-                    arButton.textContent = 'Ver en AR 🚀';
-                    arButton.style.backgroundColor = '#10b981';
-                }, 3000);
-            }
-        });
-
-    </script>
-
+  // Initial setup (Duck is already set in HTML, but good practice to call selectModel)
+  document.addEventListener('DOMContentLoaded', () => {
+    selectModel('Duck');
+  });
+</script>
 </body>
 </html>
