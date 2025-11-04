@@ -1,546 +1,754 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Art AR — WebXR & Fallback</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
-  :root{--bg:#f7f3ed;--panel:#ffffffcc;--accent:#4f46e5;--muted:#6b7280}
-  html,body{height:100%;margin:0;font-family:'Poppins',sans-serif;background:var(--bg);overflow:hidden}
-  #container{position:fixed;inset:0;display:flex;align-items:stretch;}
-  canvas{display:block;width:100%;height:100vh;z-index:10}
-  video#cameraFeed{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:5;display:none;}
-  .ui{
-    position:fixed;right:16px;top:16px;z-index:60;
-    background:var(--panel);backdrop-filter:blur(6px);border-radius:12px;padding:12px;box-shadow:0 8px 30px rgba(20,20,40,0.12);
-    min-width:180px;
-  }
-  .ui h3{margin:0 0 6px 0;font-size:14px}
-  .btn{display:inline-block;padding:8px 12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
-  .btn.gray{background:#e5e7eb;color:#111}
-  .gallery{display:flex;gap:8px;margin-top:8px;overflow:hidden}
-  .thumb{width:48px;height:48px;border-radius:6px;object-fit:cover;cursor:pointer;border:2px solid transparent}
-  .thumb.selected{border-color:var(--accent)}
-  #placementHint{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:rgba(0,0,0,0.6);color:#fff;padding:8px 12px;border-radius:999px;z-index:60;display:none}
-  #note{font-size:12px;color:var(--muted);margin-top:8px}
-  .small{font-size:12px;color:var(--muted)}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor AR con Placement Dot — Galería</title>
+    
+    <!-- Tailwind y Three.js -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/DeviceOrientationControls.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Poppins', sans-serif; background-color:#f7f3ed; color:#3b4233; overflow:hidden; touch-action:none; }
+        canvas { display:block; width:100%; height:100vh; position:absolute; top:0; left:0; z-index:10; }
+        video.video-background { position:fixed; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:5; display:none; }
+        .glass-panel { backdrop-filter: blur(10px) saturate(180%); background-color: rgba(255,255,255,0.75); border:1px solid rgba(255,255,255,0.125); box-shadow:0 8px 32px rgba(31,38,135,0.37); }
+        #control-panel { transition: transform .3s ease-in-out; transform: translateX(100%); }
+        #control-panel.is-visible { transform: translateX(0); }
+        /* Placement dot */
+        #placement-dot {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          width: 62px;
+          height: 62px;
+          transform: translate(-50%, -50%);
+          border-radius: 50%;
+          z-index: 22;
+          display: none;
+          align-items: center;
+          justify-content: center;
+          pointer-events: auto;
+        }
+        #placement-dot .inner {
+          width: 42px;
+          height: 42px;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.6);
+          border: 2px solid rgba(0,0,0,0.45);
+          box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+        }
+        #placement-dot .pulse {
+          position:absolute; width:100%; height:100%; border-radius:50%;
+          background: radial-gradient(circle, rgba(0,128,0,0.12) 0%, rgba(0,128,0,0.02) 60%, rgba(0,128,0,0) 100%);
+          animation: pulse 1.6s infinite;
+          z-index:1;
+        }
+        @keyframes pulse { 0% { transform: scale(.95); opacity:1 } 70% { transform: scale(1.4); opacity:0 } 100% { opacity:0 } }
+        /* Small helper text */
+        #placement-hint { position: fixed; left:50%; transform: translateX(-50%); bottom: 18px; z-index:22; background:rgba(0,0,0,0.55); color:#fff; padding:8px 12px; border-radius:8px; display:none; font-size:13px;}
+        /* ensure UI elements above canvas */
+        #menu-icon { z-index: 24; }
+    </style>
 </head>
-<body>
-  <div id="container">
-    <video id="cameraFeed" autoplay playsinline muted></video>
-    <div id="three-dom"></div>
-    <canvas id="xr-canvas"></canvas>
-  </div>
+<body class="bg-gray-100 antialiased">
 
-  <div class="ui" id="ui-panel">
-    <h3>Art AR — Gallery</h3>
-    <div>
-      <button id="enter-ar-btn" class="btn">Enter AR</button>
-      <button id="start-sim-btn" class="btn gray">Simulate AR</button>
+    <!-- Video passthrough -->
+    <video id="video-feed" class="video-background" autoplay playsinline></video>
+
+    <!-- 3D container -->
+    <div id="three-container"></div>
+
+    <!-- Placement dot (overlay) -->
+    <div id="placement-dot" role="button" aria-label="Point to place model" tabindex="0">
+      <div class="pulse"></div>
+      <div class="inner"></div>
+    </div>
+    <div id="placement-hint">Mueve el punto. Doble tap para colocar.</div>
+
+    <!-- Control panel -->
+    <button id="menu-icon" class="fixed top-4 right-4 p-3 bg-indigo-600 text-white rounded-full shadow-lg transition-transform hover:scale-105" onclick="toggleControlPanel()">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+    </button>
+
+    <div id="control-panel" class="fixed top-0 right-0 h-full w-full md:w-80 z-50 p-6 glass-panel overflow-y-auto">
+        <button id="close-icon" class="absolute top-4 right-4 p-2 text-gray-600 rounded-full hover:bg-gray-200" onclick="toggleControlPanel()">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+
+        <h2 class="text-2xl font-bold mb-6 text-indigo-800 pt-8 md:pt-0">Controles de Visor 3D</h2>
+
+        <div class="mb-4">
+            <h3 class="font-semibold mb-2">Modelo Actual: <span id="current-model" class="text-indigo-600">Duck</span></h3>
+            <button class="px-4 py-2 rounded bg-gray-200 w-full" onclick="toggleModelSelector(true)">Cambiar Modelo</button>
+        </div>
+
+        <div class="mb-4">
+            <h3 class="font-semibold mb-2">Modo Interacción</h3>
+            <p class="text-sm text-gray-600 mb-2">Actual: <span id="lock-status" class="font-medium text-gray-900">OFF (Rotar)</span></p>
+            <button class="px-4 py-2 rounded bg-indigo-600 text-white w-full" onclick="toggleInteractionMode()">Alternar (Rotar/Mover)</button>
+        </div>
+
+        <div class="mb-6 border-t pt-4 border-gray-300">
+            <h3 class="font-bold text-lg mb-3 text-red-600">MODO PARED (AR Simulado)</h3>
+            <p class="text-sm text-gray-600 mb-2">Estado: <span id="ar-mode-status" class="font-medium text-gray-900">Inactivo</span></p>
+            <button id="toggle-ar-mode-btn" class="px-4 py-2 rounded bg-red-500 text-white w-full" onclick="toggleARMode()">Activar Cámara y AR</button>
+            <button id="reubic-btn" class="mt-3 px-4 py-2 rounded bg-yellow-400 text-black w-full" onclick="startRelocate()" style="display:none;">Reubicar modelo</button>
+            <button id="reset-scale-btn" class="mt-2 px-4 py-2 rounded bg-gray-200 text-black w-full" onclick="resetScale()" style="display:none;">Reiniciar escala</button>
+        </div>
+
+        <div id="placement-controls" class="space-y-4 pt-4 border-t border-gray-300 hidden">
+            <h3 class="font-semibold text-gray-800">Ajuste de Posición Fina</h3>
+            <div class="pt-2">
+                <h4 class="font-medium text-sm mb-1">Rastreo de Movimiento:</h4>
+                <button id="toggle-motion-btn" class="px-4 py-2 rounded bg-green-500 text-white w-full" onclick="toggleMotionTracking(true)">Activar Rastreo de Rotación</button>
+                <p class="text-xs mt-1 text-gray-500">Mantiene el modelo fijo en la pared al mover el teléfono.</p>
+            </div>
+
+            <div>
+                <label for="ar-x-slider" class="block text-sm font-medium text-gray-700">Posición Horizontal (X): <span id="ar-x-value">0.0</span></label>
+                <input type="range" id="ar-x-slider" min="-5" max="5" value="0" step="0.1" class="w-full" oninput="updateModelPlacement()">
+            </div>
+            <div>
+                <label for="ar-y-slider" class="block text-sm font-medium text-gray-700">Posición Vertical (Y): <span id="ar-y-value">0.0</span></label>
+                <input type="range" id="ar-y-slider" min="-5" max="5" value="0" step="0.1" class="w-full" oninput="updateModelPlacement()">
+            </div>
+            <div>
+                <label for="ar-z-slider" class="block text-sm font-medium text-gray-700">Rotación (Z): <span id="ar-z-value">0.0</span>°</label>
+                <input type="range" id="ar-z-slider" min="-180" max="180" value="0" step="1" class="w-full" oninput="updateModelPlacement()">
+            </div>
+            <div class="pt-4 border-t border-gray-300">
+                <h4 class="font-semibold text-gray-800 mb-2">Escala</h4>
+                <div class="flex space-x-2">
+                    <button class="px-4 py-2 rounded bg-gray-200 flex-1" onclick="adjustScale(-0.1)">Reducir</button>
+                    <button class="px-4 py-2 rounded bg-gray-200 flex-1" onclick="adjustScale(0.1)">Aumentar</button>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div id="gallery" class="gallery" aria-label="Art gallery" style="margin-top:10px">
-      <!-- thumbnails -->
-      <img class="thumb selected" data-src="https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?w=1024&q=80&auto=format&fit=crop" src="https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?w=200&q=60&auto=format&fit=crop" alt="Art 1">
-      <img class="thumb" data-src="https://images.unsplash.com/photo-1513353449046-5f1c22e5a9e9?w=1024&q=80&auto=format&fit=crop" src="https://images.unsplash.com/photo-1513353449046-5f1c22e5a9e9?w=200&q=60&auto=format&fit=crop" alt="Art 2">
-      <img class="thumb" data-src="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1024&q=80&auto=format&fit=crop" src="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200&q=60&auto=format&fit=crop" alt="Art 3">
+    <!-- Model selector modal -->
+    <div id="model-selector-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-white rounded-xl p-8 shadow-2xl w-full max-w-sm">
+            <h3 class="text-xl font-bold mb-4">Seleccionar Modelo GLTF</h3>
+            <div class="space-y-3">
+                <button class="px-4 py-2 rounded bg-gray-200 w-full" onclick="selectModel('Duck')">Duck</button>
+                <button class="px-4 py-2 rounded bg-gray-200 w-full" onclick="selectModel('Helmet')">Helmet</button>
+                <button class="px-4 py-2 rounded bg-gray-200 w-full" onclick="selectModel('BoomBox')">BoomBox</button>
+            </div>
+            <button class="mt-6 px-4 py-2 rounded bg-indigo-600 text-white w-full" onclick="toggleModelSelector(false)">Cerrar</button>
+        </div>
     </div>
 
-    <div id="note" class="small">Select an artwork then <strong>Enter AR</strong>. Tap the reticle to place the frame. Use pinch to scale and drag to rotate after placement.</div>
-  </div>
+    <!-- alert -->
+    <div id="custom-alert" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-xl text-white bg-indigo-600 opacity-0 pointer-events-none transition-opacity duration-300">
+        <span id="alert-message"></span>
+    </div>
 
-  <div id="placementHint">Move your phone to detect surfaces</div>
+<script type="module">
+/* ------------------------------------------------------------
+   Visor AR con Placement Dot integrado
+   - Double tap en el punto para colocar el modelo
+   - Drag del punto para posicionarlo
+   - Pinch para escalar el modelo
+   - Reubicar desde el panel
+   ------------------------------------------------------------ */
 
-  <!-- Three.js + modules -->
-  <script type="module">
-  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
-  import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
-  import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/webxr/ARButton.js';
-  import { DeviceOrientationControls } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/DeviceOrientationControls.js';
+let scene, camera, renderer, controls, gltfLoader;
+let modelContainer = null, currentModel = null;
+let deviceOrientationControls;
+let isARMode = false, isMotionTrackingActive = false;
+const videoElement = document.getElementById('video-feed');
 
-  /*****************************************************************************
-   *  Overview:
-   *  - Try WebXR immersive-ar first (hit-test + anchors)
-   *  - If not supported, provide simulated AR fallback using camera + gyro
-   *  - Art object: a frame (thin box) + inner plane with chosen texture
-   *  - After placing: allow rotate (one-finger drag) and scale (pinch)
-   *****************************************************************************/
+const MODELS = {
+  Duck: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF/Duck.gltf',
+  Helmet: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
+  BoomBox: 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/BoomBox/glTF/BoomBox.gltf'
+};
 
-  // DOM
-  const enterARBtn = document.getElementById('enter-ar-btn');
-  const startSimBtn = document.getElementById('start-sim-btn');
-  const placementHint = document.getElementById('placementHint');
-  const gallery = document.getElementById('gallery');
-  const cameraFeed = document.getElementById('cameraFeed');
+// UI elements
+const placementDot = document.getElementById('placement-dot');
+const placementHint = document.getElementById('placement-hint');
+const reubicBtn = document.getElementById('reubic-btn');
+const resetScaleBtn = document.getElementById('reset-scale-btn');
 
-  // THREE core
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 50);
-  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, canvas: document.getElementById('xr-canvas') });
+let lastTapTime = 0;
+let placedOnce = false; // si el modelo ya fue colocado
+
+// Pinch state for scaling
+let pinchState = { active:false, lastDist:0 };
+
+// Initialize Three
+function initThree(){
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+  camera.position.set(0,0,0);
+  camera.updateProjectionMatrix();
+
+  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
   renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.outputEncoding = THREE.sRGBEncoding;
-  renderer.xr.enabled = true;
-  document.getElementById('three-dom').appendChild(renderer.domElement);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setClearColor(0x3b4233, 1);
+  document.getElementById('three-container').appendChild(renderer.domElement);
 
-  // Lighting
-  const hemi = new THREE.HemisphereLight(0xffffff,0xbbbbff,0.8); scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(1,3,2); dir.castShadow=true; scene.add(dir);
+  const ambient = new THREE.AmbientLight(0xffffff, 1.5); scene.add(ambient);
+  const dir = new THREE.DirectionalLight(0xffffff, 1); dir.position.set(5,5,5); scene.add(dir);
 
-  // Reticle (placement indicator)
-  const reticle = new THREE.Mesh(
-    new THREE.RingGeometry(0.12, 0.18, 32).rotateX(-Math.PI/2),
-    new THREE.MeshBasicMaterial({ color:0xffff00, transparent:true, opacity:0.9 })
-  );
-  reticle.matrixAutoUpdate = false;
-  reticle.visible = false;
-  scene.add(reticle);
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.target.set(0,0,-2);
+  controls.update();
 
-  // Model container & placed object
-  let placedRoot = null;      // Object3D parent for the placed artwork (anchored)
-  let placedAnchor = null;    // XRAnchor if available
-  let tempModel = null;       // internal 3D model (frame + plane)
-  let currentTextureURL = gallery.querySelector('.thumb.selected').dataset.src;
+  modelContainer = new THREE.Group();
+  scene.add(modelContainer);
 
-  // GLTF loader (if later you want a frame model)
-  const loader = new GLTFLoader();
+  gltfLoader = new THREE.GLTFLoader();
 
-  // DeviceOrientation fallback controls
-  let deviceControls = null;
-  let simActive = false;
-  let simCameraStream = null;
+  deviceOrientationControls = new THREE.DeviceOrientationControls(camera);
 
-  // Helpers for gestures
-  let ongoingTouches = [];
-  function copyTouch(t){ return {id:t.identifier, x:t.clientX, y:t.clientY}; }
-  function getTouchById(id){ return ongoingTouches.find(t=>t.id===id); }
-  function updateTouch(id,x,y){ const t = getTouchById(id); if(t){ t.x=x; t.y=y; } }
-  function removeTouch(id){ ongoingTouches = ongoingTouches.filter(t=>t.id!==id); }
+  window.addEventListener('resize', onWindowResize);
 
-  // Resize
-  window.addEventListener('resize', ()=> {
-    camera.aspect = window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+  // touch listeners for pinch-scale on whole canvas
+  renderer.domElement.addEventListener('touchstart', onTouchStart, { passive:false });
+  renderer.domElement.addEventListener('touchmove', onTouchMove, { passive:false });
+  renderer.domElement.addEventListener('touchend', onTouchEnd, { passive:false });
+}
 
-  /*********************** Build Artwork (frame + plane) *************************/
-  function buildArtwork(textureURL){
-    // Root group
-    const root = new THREE.Group();
-
-    // Plane for art (1 unit width x 1.5 height base)
-    const width = 1.0, height = 1.5;
-    const geometry = new THREE.PlaneGeometry(width, height);
-    const texture = new THREE.TextureLoader().load(textureURL);
-    texture.encoding = THREE.sRGBEncoding;
-    const material = new THREE.MeshStandardMaterial({ map: texture, roughness:0.6, metalness:0.0 });
-    const plane = new THREE.Mesh(geometry, material);
-    plane.position.set(0,0,0.02); // slight offset forward
-    plane.castShadow = true;
-    plane.receiveShadow = false;
-    root.add(plane);
-
-    // Simple thin frame (a slightly bigger box)
-    const frameGeom = new THREE.BoxGeometry(width + 0.06, height + 0.06, 0.05);
-    const frameMat = new THREE.MeshStandardMaterial({ color:0x111111, metalness:0.2, roughness:0.6 });
-    const frame = new THREE.Mesh(frameGeom, frameMat);
-    frame.position.set(0,0,-0.01);
-    root.add(frame);
-
-    // Add subtle backplate to prevent see-through
-    const backGeom = new THREE.PlaneGeometry(width+0.08, height+0.08);
-    const backMat = new THREE.MeshStandardMaterial({ color:0x0e0e0e });
-    const back = new THREE.Mesh(backGeom, backMat);
-    back.position.set(0,0,-0.055);
-    root.add(back);
-
-    // Scale root to a comfortable default (we'll allow user scaling)
-    root.scale.setScalar(1.0);
-
-    return root;
+// Load model
+function loadModelByName(name){
+  document.getElementById('current-model').textContent = name;
+  if (currentModel) {
+    modelContainer.remove(currentModel);
+    disposeModel(currentModel);
+    currentModel = null;
   }
+  showAlert(`Cargando ${name}...`);
+  gltfLoader.load(MODELS[name], gltf=>{
+    currentModel = gltf.scene;
+    // centrar y escalar a tamaño inicial
+    const box = new THREE.Box3().setFromObject(currentModel);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    currentModel.position.sub(center);
+    const scaleFactor = 1.5 / Math.max(size.x, size.y, size.z);
+    currentModel.scale.setScalar(scaleFactor);
+    modelContainer.add(currentModel);
 
-  /************************** WebXR: Hit test & anchors **************************/
-  let xrHitTestSource = null;
-  let xrRefSpace = null;
+    // añadir contact shadow (sprite)
+    addContactShadow(currentModel, size.y);
 
-  async function startXR(){
-    if(!navigator.xr) {
-      alert('WebXR not supported on this device/browser. Use "Simulate AR" button for fallback.');
-      return;
-    }
-    try{
-      const supported = await navigator.xr.isSessionSupported('immersive-ar');
-      if(!supported){
-        alert('immersive-ar not supported. Try latest Chrome on Android with ARCore.');
-        return;
-      }
-    }catch(e){
-      console.warn('XR check failed', e);
-      alert('WebXR check failed.');
-      return;
-    }
-
-    // Create session via ARButton helper (but we want more control, so we'll request manually)
-    const session = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test', 'local-floor', 'anchors'],
-      optionalFeatures: ['dom-overlay'],
-      domOverlay: { root: document.body }
-    });
-
-    renderer.xr.setSession(session);
-    // reference space for placing content
-    xrRefSpace = await session.requestReferenceSpace('local-floor');
-
-    // request a hit test source using 'viewer' reference space
-    const viewerSpace = await session.requestReferenceSpace('viewer');
-    xrHitTestSource = await session.requestHitTestSource({ space: viewerSpace });
-
-    // show placement hint
-    placementHint.style.display = 'block';
-
-    // react to session end
-    session.addEventListener('end', ()=> {
-      cleanupXR();
-      placementHint.style.display = 'none';
-    });
-
-    // Input: handle select event (tap) to place object
-    session.addEventListener('select', (ev) => {
-      // place at reticle's current pose
-      if(reticle.visible){
-        placeArtworkAtReticle(ev.frame);
-      }
-    });
-
-    // start render loop via renderer.setAnimationLoop
-    renderer.setAnimationLoop(onXRFrame);
-  }
-
-  function cleanupXR(){
-    // remove anchor & placed object if any (but we may want to keep it; here we keep it)
-    xrHitTestSource = null;
-    xrRefSpace = null;
-    renderer.setAnimationLoop(null);
-    renderer.xr.setSession(null);
-  }
-
-  function onXRFrame(time, frame){
-    const session = frame.session;
-    // get viewer pose relative to reference space
-    const pose = frame.getViewerPose(xrRefSpace);
-    if(!pose){
-      renderer.render(scene, camera);
-      return;
-    }
-
-    // run hit test
-    if(xrHitTestSource){
-      const hitResults = frame.getHitTestResults(xrHitTestSource);
-      if(hitResults.length > 0 && !placedRoot){
-        const hit = hitResults[0];
-        const hitPose = hit.getPose(xrRefSpace);
-        // position reticle
-        reticle.visible = true;
-        reticle.matrix.fromArray(hitPose.transform.matrix);
-      } else if(hitResults.length > 0 && placedRoot){
-        // hide reticle if already placed
-        reticle.visible = false;
-      } else {
-        reticle.visible = false;
-      }
-    }
-
-    // If we have an anchor with tracking, update placedRoot using anchor's pose if available:
-    if(placedRoot && placedAnchor && frame.getPose){
-      // try to get anchor pose (anchors API might provide anchor.anchorSpace)
-      try{
-        const anchorPose = frame.getPose(placedAnchor.anchorSpace || placedAnchor, xrRefSpace);
-        if(anchorPose){
-          placedRoot.matrix.fromArray(anchorPose.transform.matrix);
-          placedRoot.matrix.decompose(placedRoot.position, placedRoot.quaternion, placedRoot.scale);
-        }
-      }catch(e){ /* ignore if not available */ }
-    }
-
-    renderer.render(scene, camera);
-  }
-
-  /************************** Place artwork and anchors **************************/
-  // Called when user taps/selects while reticle visible. We create a placedRoot and attempt to create an XRAnchor.
-  async function placeArtworkAtReticle(frame){
-    if(!reticle.visible) return;
-    // create placedRoot at reticle matrix
-    placedRoot = new THREE.Group();
-    placedRoot.matrixAutoUpdate = false;
-    placedRoot.matrix.copy(reticle.matrix);
-    placedRoot.matrix.decompose(placedRoot.position, placedRoot.quaternion, placedRoot.scale);
-
-    // Create the artwork model from current selection
-    tempModel = buildArtwork(currentTextureURL);
-    // center the art so it faces camera: rotate to lay flat against plane's normal
-    // reticle is aligned with surface normal, so we just add model
-    placedRoot.add(tempModel);
-    scene.add(placedRoot);
-
-    // Try to create XRAnchor (if anchors supported)
-    try{
-      const session = renderer.xr.getSession();
-      if(session && session.requestAnchor){
-        // Many implementations use frame.createAnchor, but session.requestAnchor is also used
-        const frameOfRef = xrRefSpace;
-        // Use the last frame's hit test to get the transform - but here assume reticle matrix
-        const transform = new XRRigidTransform(); // identity
-        // Simpler approach: request anchor from reticle's pose using frame (if available)
-        // We'll attempt to use createAnchor via frame (works in some browsers)
-        const viewerPose = frame ? frame.getViewerPose(xrRefSpace) : null;
-        // Preferred: ask frame to create anchor from hit result - but we can't pass hit here, so skip
-        // Alternatively, use anchors via session.requestAnchor if available:
-        if(session.requestAnchor){
-          // Use matrix of reticle to build pose:
-          const m = reticle.matrix.elements;
-          const pose = new XRRigidTransform({
-            x: m[12], y: m[13], z: m[14]
-          }, {
-            x: 0, y: 0, z: 0, w: 1
-          }); // simple pose - orientation not exact but OK
-          // request anchor
-          try{
-            const anchor = await session.requestAnchor(pose, xrRefSpace);
-            placedAnchor = anchor;
-            // anchor.anchorSpace available in some implementations
-            console.log('Anchor created', anchor);
-          }catch(e){ console.warn('requestAnchor failed', e); placedAnchor = null; }
-        }
-      }
-    }catch(e){
-      console.warn('anchor creation failed', e);
-      placedAnchor = null;
-    }
-
-    // Hide reticle and hint after placement
-    reticle.visible = false;
-    placementHint.style.display = 'none';
-
-    // Enable touch interactions on the renderer canvas for rotate/scale
-    enableTouchInteractions();
-  }
-
-  /************************ Touch interactions for placed object ************************/
-  function enableTouchInteractions(){
-    const canvas = renderer.domElement;
-
-    canvas.addEventListener('touchstart', onTouchStart, {passive:false});
-    canvas.addEventListener('touchmove', onTouchMove, {passive:false});
-    canvas.addEventListener('touchend', onTouchEnd, {passive:false});
-  }
-  function onTouchStart(e){
-    if(!placedRoot) return;
-    // track touches
-    ongoingTouches = [];
-    for(const t of e.touches) ongoingTouches.push(copyTouch(t));
-    e.preventDefault();
-  }
-  function onTouchMove(e){
-    if(!placedRoot) return;
-    e.preventDefault();
-    // single finger -> rotate around Y
-    if(e.touches.length === 1 && ongoingTouches.length === 1){
-      const t = e.touches[0];
-      const prev = ongoingTouches[0];
-      const dx = t.clientX - prev.x;
-      const rotY = dx * 0.005; // sensitivity
-      placedRoot.rotation.y -= rotY;
-      // update tracked touch
-      updateTouch(ongoingTouches[0].id, t.clientX, t.clientY);
-    }
-    // two fingers -> pinch to scale
-    else if(e.touches.length === 2){
-      const t0 = e.touches[0], t1 = e.touches[1];
-      const prev0 = getTouchById(ongoingTouches[0].id) || copyTouch(e.touches[0]);
-      const prev1 = getTouchById(ongoingTouches[1].id) || copyTouch(e.touches[1]);
-
-      const prevDist = Math.hypot(prev1.x - prev0.x, prev1.y - prev0.y);
-      const newDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-      const scaleFactor = newDist / prevDist;
-      // clamp scale
-      const newScale = THREE.MathUtils.clamp(placedRoot.scale.x * scaleFactor, 0.2, 6);
-      placedRoot.scale.setScalar(newScale);
-
-      // update tracked touches positions
-      updateTouch(ongoingTouches[0].id, t0.clientX, t0.clientY);
-      updateTouch(ongoingTouches[1].id, t1.clientX, t1.clientY);
-    }
-  }
-  function onTouchEnd(e){
-    // update ongoing touches
-    if(e.changedTouches){
-      for(const t of e.changedTouches) removeTouch(t.identifier);
-    }
-    if(e.touches.length === 0) ongoingTouches = [];
-  }
-
-  /************************** Simulated AR fallback **************************/
-  async function startSimulatedAR(){
-    // try to start camera feed as background
-    try{
-      simCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio:false });
-      cameraFeed.srcObject = simCameraStream;
-      cameraFeed.style.display = 'block';
-    }catch(e){
-      console.warn('Camera fallback failed', e);
-      alert('Camera access required for simulated AR fallback.');
-      return;
-    }
-
-    // Activate DeviceOrientation controls for camera movement feel
-    deviceControls = new DeviceOrientationControls(camera);
-    deviceControls.connect();
-
-    // place reticle at center (we will use screenToWorld conversion)
-    reticle.visible = true;
-    placementHint.style.display = 'block';
-    simActive = true;
-
-    // start render loop
-    renderer.setAnimationLoop(simulateFrame);
-  }
-
-  function simulateFrame(){
-    // simple reticle behavior: keep reticle 2m in front of camera
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-    const pos = new THREE.Vector3().copy(camera.position).add(dir.multiplyScalar(2.0));
-    reticle.position.copy(pos);
-    reticle.quaternion.copy(camera.quaternion);
-    reticle.updateMatrix();
-
-    renderer.render(scene,camera);
-  }
-
-  function stopSimulatedAR(){
-    if(simCameraStream){
-      simCameraStream.getTracks().forEach(t=>t.stop());
-      cameraFeed.srcObject = null;
-      cameraFeed.style.display = 'none';
-    }
-    if(deviceControls) deviceControls.dispose();
-    simActive = false;
-    renderer.setAnimationLoop(null);
-    reticle.visible = false;
-    placementHint.style.display = 'none';
-  }
-
-  /************************** UI bindings **************************/
-  // Enter AR button using WebXR when available
-  enterARBtn.addEventListener('click', async () => {
-    // If already in XR, ignore
-    if(renderer.xr.isPresenting) return;
-    try{
-      await startXR();
-      // scene initial state for XR: if user hasn't created a model yet, create one but keep hidden
-      if(!tempModel) currentTextureURL = gallery.querySelector('.thumb.selected').dataset.src;
-      // renderer will run the XR loop
-    }catch(e){
-      console.error('startXR error', e);
-      alert('Failed to start AR session: ' + e.message);
-    }
-  });
-
-  // Simulated AR fallback
-  startSimBtn.addEventListener('click', ()=>{
-    if(simActive) { stopSimulatedAR(); startSimBtn.textContent='Simulate AR'; }
-    else { startSimulatedAR(); startSimBtn.textContent='Stop Simulation'; }
-  });
-
-  // Gallery selection change
-  gallery.addEventListener('click', (e)=>{
-    const t = e.target.closest('.thumb');
-    if(!t) return;
-    // mark selection
-    gallery.querySelectorAll('.thumb').forEach(i => i.classList.remove('selected'));
-    t.classList.add('selected');
-    currentTextureURL = t.dataset.src;
-    // if artwork placed already, update texture on the fly
-    if(tempModel){
-      // find plane child (plane is first child per buildArtwork)
-      const plane = tempModel.children.find(c => c.geometry && c.geometry.type === 'PlaneGeometry');
-      if(plane) {
-        const newTex = new THREE.TextureLoader().load(currentTextureURL);
-        newTex.encoding = THREE.sRGBEncoding;
-        plane.material.map = newTex;
-        plane.material.needsUpdate = true;
-      }
-    }
-  });
-
-  /************************** Utility: Screen->World (for simulated) **************************/
-  function screenToWorld(x,y, distance=2){
-    // convert screen coords to NDC
-    const ndc = new THREE.Vector3((x/window.innerWidth)*2-1, -(y/window.innerHeight)*2+1, 0.5);
-    ndc.unproject(camera);
-    const dir = ndc.sub(camera.position).normalize();
-    return camera.position.clone().add(dir.multiplyScalar(distance));
-  }
-
-  // When user taps the screen in simulated mode, place the model at reticle location
-  renderer.domElement.addEventListener('touchend', (ev)=>{
-    // double-tap detection for placement in simulated mode
-    const now = performance.now();
-    if(simActive && now - (renderer.domElement._lastTap||0) < 300){
-      // place at reticle
-      placeSimulatedAtReticle();
-      renderer.domElement._lastTap = 0;
+    showAlert(`${name} cargado.`);
+    // si ya fue colocado anteriormente, mantener visibilidad
+    if (placedOnce) {
+      currentModel.visible = true;
     } else {
-      renderer.domElement._lastTap = now;
+      currentModel.visible = false;
+    }
+  }, undefined, err=>{
+    console.error('Error cargando GLTF', err);
+    showAlert('Error cargando modelo.');
+  });
+}
+
+function disposeModel(obj){
+  obj.traverse(o=>{
+    if (o.isMesh){
+      if (o.geometry) o.geometry.dispose();
+      if (o.material){
+        if (Array.isArray(o.material)){
+          o.material.forEach(m=>m.dispose());
+        } else m.dispose();
+      }
     }
   });
+}
 
-  function placeSimulatedAtReticle(){
-    if(!simActive) return;
-    if(placedRoot) {
-      // already placed — maybe show message
-      placementHint.style.display = 'none';
-      return;
+function addContactShadow(model, modelHeight){
+  const c = document.createElement('canvas'); c.width=c.height=256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(128,128,10,128,128,128);
+  g.addColorStop(0,'rgba(0,0,0,0.6)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
+  const tex = new THREE.CanvasTexture(c);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent:true, depthWrite:false }));
+  sprite.name = 'contactShadow';
+  sprite.position.set(0, - (modelHeight/2 || 0.5), 0);
+  sprite.scale.set(1.6,1.6,1);
+  model.add(sprite);
+}
+
+// Window resize
+function onWindowResize(){
+  if (!camera || !renderer) return;
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+// Animate
+function animate(){
+  requestAnimationFrame(animate);
+  if (controls && controls.enabled) controls.update();
+  if (isMotionTrackingActive && deviceOrientationControls) deviceOrientationControls.update();
+  renderer.render(scene, camera);
+}
+
+// UI helpers
+function showAlert(msg){
+  const box = document.getElementById('custom-alert');
+  document.getElementById('alert-message').textContent = msg;
+  box.classList.remove('opacity-0','pointer-events-none');
+  box.classList.add('opacity-100','pointer-events-auto');
+  clearTimeout(box._t);
+  box._t = setTimeout(()=>{ box.classList.remove('opacity-100','pointer-events-auto'); box.classList.add('opacity-0','pointer-events-none'); }, 2200);
+}
+
+/* -------------------------
+   Placement dot behavior
+   ------------------------- */
+function showPlacementDot(show){
+  placementDot.style.display = show ? 'flex' : 'none';
+  placementHint.style.display = show ? 'block' : 'none';
+  // make dot pointer active or not
+  if (show) placementDot.setAttribute('aria-hidden', 'false'); else placementDot.setAttribute('aria-hidden','true');
+}
+
+// convert 2D screen coords to 3D world position at a fixed distance in front of camera
+function screenToWorld(x, y, distance = 2.0){
+  // NDC coordinates
+  const ndcX = (x / window.innerWidth) * 2 - 1;
+  const ndcY = - (y / window.innerHeight) * 2 + 1;
+  const ndcZ = 0.5; // use z=0.5 then project and cast
+  const vec = new THREE.Vector3(ndcX, ndcY, ndcZ).unproject(camera);
+  const dir = vec.sub(camera.position).normalize();
+  const pos = camera.position.clone().add(dir.multiplyScalar(distance));
+  return pos;
+}
+
+function placeModelAtScreen(x, y){
+  if (!modelContainer) return;
+  const pos = screenToWorld(x, y, 2.0);
+  modelContainer.position.copy(pos);
+  // reset rotation to align with camera-facing wall-ish
+  modelContainer.rotation.set(0,0,0);
+  // make model visible
+  if (currentModel) currentModel.visible = true;
+  placedOnce = true;
+  showPlacementDot(false);
+  reubicBtn.style.display = 'block';
+  resetScaleBtn.style.display = 'block';
+  showAlert('Modelo colocado ✅');
+  // update sliders with new position (optional)
+  document.getElementById('ar-x-slider').value = modelContainer.position.x;
+  document.getElementById('ar-y-slider').value = modelContainer.position.y;
+  document.getElementById('ar-x-value').textContent = modelContainer.position.x.toFixed(1);
+  document.getElementById('ar-y-value').textContent = modelContainer.position.y.toFixed(1);
+}
+
+// Double tap detection & drag on placement dot
+(function setupPlacementDotEvents(){
+  let dragging = false;
+  let startTouchOffset = { x:0, y:0 };
+
+  // Pointer support (desktop)
+  placementDot.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    dragging = true;
+    placementDot.setPointerCapture(e.pointerId);
+    startTouchOffset.x = e.clientX - placementDot.getBoundingClientRect().left;
+    startTouchOffset.y = e.clientY - placementDot.getBoundingClientRect().top;
+  });
+  placementDot.addEventListener('pointermove', (e)=>{
+    if (!dragging) return;
+    e.preventDefault();
+    const nx = e.clientX - startTouchOffset.x + placementDot.offsetWidth/2;
+    const ny = e.clientY - startTouchOffset.y + placementDot.offsetHeight/2;
+    placementDot.style.left = `${Math.max(8, Math.min(window.innerWidth-8, nx))}px`;
+    placementDot.style.top = `${Math.max(8, Math.min(window.innerHeight-8, ny))}px`;
+  });
+  placementDot.addEventListener('pointerup', (e)=>{
+    dragging = false;
+    try { placementDot.releasePointerCapture(e.pointerId); } catch(e){}
+    handleDotTap(e.clientX, e.clientY);
+  });
+
+  // Touch support (mobile)
+  placementDot.addEventListener('touchstart', (e)=>{
+    e.preventDefault();
+    if (e.touches.length === 1){
+      const t = e.touches[0];
+      dragging = true;
+      startTouchOffset.x = t.clientX - placementDot.getBoundingClientRect().left;
+      startTouchOffset.y = t.clientY - placementDot.getBoundingClientRect().top;
     }
-    placedRoot = new THREE.Group();
-    // position at reticle position and orientation
-    placedRoot.position.copy(reticle.position);
-    placedRoot.quaternion.copy(reticle.quaternion);
-    // add model
-    tempModel = buildArtwork(currentTextureURL);
-    placedRoot.add(tempModel);
-    scene.add(placedRoot);
-    placementHint.style.display = 'none';
-    // allow touch interactions
-    enableTouchInteractions();
+  }, { passive:false });
+
+  placementDot.addEventListener('touchmove', (e)=>{
+    if (!dragging) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    const nx = t.clientX - startTouchOffset.x + placementDot.offsetWidth/2;
+    const ny = t.clientY - startTouchOffset.y + placementDot.offsetHeight/2;
+    placementDot.style.left = `${Math.max(8, Math.min(window.innerWidth-8, nx))}px`;
+    placementDot.style.top = `${Math.max(8, Math.min(window.innerHeight-8, ny))}px`;
+  }, { passive:false });
+
+  placementDot.addEventListener('touchend', (e)=>{
+    dragging = false;
+    const t = (e.changedTouches && e.changedTouches[0]) || {};
+    const x = t.clientX || (placementDot.getBoundingClientRect().left + placementDot.offsetWidth/2);
+    const y = t.clientY || (placementDot.getBoundingClientRect().top + placementDot.offsetHeight/2);
+    handleDotTap(x, y);
+  }, { passive:false });
+
+  function handleDotTap(clientX, clientY){
+    const now = Date.now();
+    const dt = now - lastTapTime;
+    lastTapTime = now;
+    // double tap threshold 300ms
+    if (dt < 300){
+      // double tap -> place model
+      placeModelAtScreen(clientX, clientY);
+    } else {
+      // single tap (no-op or small feedback)
+      // small pulse feedback
+      placementDot.style.transform = 'translate(-50%,-50%) scale(0.98)';
+      setTimeout(()=> placementDot.style.transform = 'translate(-50%,-50%) scale(1)', 120);
+    }
   }
+})();
 
-  /************************** Start initial scene (non-XR) **************************/
-  // set camera default position (so device orientation/OrbitControls has reference)
-  camera.position.set(0, 1.6, 3);
-  // Add a subtle ground to catch shadows (not visible when camera passthrough)
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0}));
-  ground.rotation.x = -Math.PI/2; ground.position.y = -1.2; ground.receiveShadow=true;
-  scene.add(ground);
+/* -------------------------
+   Pinch-to-scale handlers
+   ------------------------- */
+function onTouchStart(e){
+  if (e.touches && e.touches.length === 2){
+    pinchState.active = true;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchState.lastDist = Math.hypot(dx, dy);
+  }
+}
+function onTouchMove(e){
+  if (pinchState.active && e.touches && e.touches.length === 2 && currentModel){
+    e.preventDefault();
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const newDist = Math.hypot(dx, dy);
+    if (pinchState.lastDist > 0){
+      const factor = newDist / pinchState.lastDist;
+      // scale with limits
+      const newScale = Math.max(0.05, Math.min(10, currentModel.scale.x * factor));
+      currentModel.scale.set(newScale, newScale, newScale);
+      // update shadow scale if present
+      const shadow = currentModel.getObjectByName('contactShadow');
+      if (shadow) shadow.scale.set(newScale*2, newScale*2, 1);
+    }
+    pinchState.lastDist = newDist;
+  }
+}
+function onTouchEnd(e){
+  if (!e.touches || e.touches.length < 2) pinchState.active = false;
+}
 
-  // keep a small animation loop so the scene shows before XR starts
-  renderer.setAnimationLoop(()=> {
-    renderer.render(scene,camera);
-  });
+/* -------------------------
+   AR mode: camera passthrough
+   ------------------------- */
+async function startCameraPassThrough(){
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    videoElement.srcObject = stream;
+    videoElement.style.display = 'block';
+    videoElement.play();
+    // make canvas transparent so video shows behind
+    renderer.setClearColor(0x000000, 0);
+    renderer.domElement.style.zIndex = 10;
+    return true;
+  } catch(err){
+    console.error('Camera error', err);
+    showAlert('No se pudo activar la cámara. Revisa permisos.');
+    return false;
+  }
+}
+function stopCameraPassThrough(){
+  if (videoElement.srcObject){
+    videoElement.srcObject.getTracks().forEach(t=>t.stop());
+  }
+  videoElement.srcObject = null;
+  videoElement.style.display = 'none';
+  renderer.setClearColor(0x3b4233, 1);
+  renderer.domElement.style.zIndex = 10;
+}
 
-  /************************** Notes for tester **************************/
-  // 1) To test WebXR on Android: use Chrome for Android + ARCore-supporting phone.
-  // 2) Host this page on HTTPS (GitHub Pages / Vercel / Netlify). WebXR requires secure context.
-  // 3) If device doesn't support WebXR immersive-ar, click "Simulate AR" and use double-tap to place.
-  // 4) After placement: drag one finger to rotate, pinch to scale. Change artwork via gallery.
-  // 5) Anchors support is attempted but browser support varies; the app falls back to keeping the placed object in scene.
-  //
-  // Implementation details are commented inside the code blocks above.
+/* Toggle AR mode (show dot & camera) */
+async function toggleARMode(){
+  isARMode = !isARMode;
+  const statusSpan = document.getElementById('ar-mode-status');
+  const controlsDiv = document.getElementById('placement-controls');
+  const toggleBtn = document.getElementById('toggle-ar-mode-btn');
 
-  </script>
+  if (isARMode){
+    const ok = await startCameraPassThrough();
+    if (!ok){ isARMode = false; return; }
+    statusSpan.textContent = 'Activo';
+    controlsDiv.classList.remove('hidden');
+    toggleBtn.textContent = 'Desactivar Cámara y AR';
+    toggleBtn.classList.remove('bg-red-500'); toggleBtn.classList.add('bg-green-600');
+    // disable orbit controls, enable touch placement
+    controls.enabled = false;
+    document.getElementById('lock-status').textContent = 'ON (Mover)';
+    // show placement dot if model not already placed
+    if (!placedOnce){
+      showPlacementDot(true);
+      // position dot center if hidden
+      placementDot.style.left = '50%'; placementDot.style.top = '50%';
+      placementDot.style.display = 'flex';
+      placementHint.style.display = 'block';
+    } else {
+      // model already placed - show Reubicar option
+      showPlacementDot(false);
+      placementHint.style.display = 'none';
+      reubicBtn.style.display = 'block';
+      resetScaleBtn.style.display = 'block';
+    }
+    // auto enable motion tracking for realism
+    toggleMotionTracking(true);
+  } else {
+    stopCameraPassThrough();
+    statusSpan.textContent = 'Inactivo';
+    controlsDiv.classList.add('hidden');
+    toggleBtn.textContent = 'Activar Cámara y AR';
+    toggleBtn.classList.remove('bg-green-600'); toggleBtn.classList.add('bg-red-500');
+    controls.enabled = true;
+    document.getElementById('lock-status').textContent = 'OFF (Rotar)';
+    // hide placement ui
+    showPlacementDot(false);
+    placementHint.style.display = 'none';
+    // keep model visible if was placed
+    toggleMotionTracking(false);
+  }
+}
+
+// toggle motion tracking (DeviceOrientation)
+function toggleMotionTracking(forceState){
+  const motionBtn = document.getElementById('toggle-motion-btn');
+  isMotionTrackingActive = (typeof forceState === 'boolean') ? forceState : !isMotionTrackingActive;
+  if (!isARMode){
+    showAlert('Activa Modo AR primero.');
+    isMotionTrackingActive = false;
+    return;
+  }
+  if (isMotionTrackingActive){
+    // request permission on iOS
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+      DeviceOrientationEvent.requestPermission().then(p=>{
+        if (p === 'granted'){ deviceOrientationControls.connect(); deviceOrientationControls.enabled = true; motionBtn.textContent = 'Desactivar Rastreo de Rotación'; motionBtn.classList.remove('bg-green-500'); motionBtn.classList.add('bg-red-500'); showAlert('Giroscopio activo.'); }
+        else { isMotionTrackingActive = false; showAlert('Permiso giroscopio denegado.'); }
+      }).catch(e=>{ console.warn(e); showAlert('Error solicitando permiso giroscopio.'); isMotionTrackingActive=false; });
+    } else {
+      deviceOrientationControls.connect();
+      deviceOrientationControls.enabled = true;
+      motionBtn.textContent = 'Desactivar Rastreo de Rotación';
+      motionBtn.classList.remove('bg-green-500'); motionBtn.classList.add('bg-red-500');
+      showAlert('Giroscopio activo.');
+    }
+  } else {
+    try { deviceOrientationControls.disconnect(); } catch(e){}
+    deviceOrientationControls.enabled = false;
+    motionBtn.textContent = 'Activar Rastreo de Rotación';
+    motionBtn.classList.remove('bg-red-500'); motionBtn.classList.add('bg-green-500');
+    camera.rotation.set(0,0,0);
+    showAlert('Giroscopio desactivado.');
+  }
+}
+
+/* Reubicar: mostrar dot y let user place again */
+function startRelocate(){
+  if (!isARMode){
+    showAlert('Activa Modo AR para reubicar.');
+    return;
+  }
+  showPlacementDot(true);
+  placementDot.style.left = `${window.innerWidth/2}px`;
+  placementDot.style.top = `${window.innerHeight/2}px`;
+  // hide model until placed again (optional - keep visible as ghost)
+  if (currentModel) currentModel.visible = true;
+  showAlert('Mueve el punto y doble tap para confirmar la nueva posición.');
+}
+
+/* Reset scale */
+function resetScale(){
+  if (!currentModel) return;
+  currentModel.scale.setScalar(1.0);
+  const shadow = currentModel.getObjectByName('contactShadow');
+  if (shadow) shadow.scale.set(2,2,1);
+  showAlert('Escala reiniciada.');
+}
+
+/* Interaction mode toggle (Orbit / Move) */
+function toggleInteractionMode(){
+  if (controls.enabled){
+    controls.enabled = false;
+    document.getElementById('lock-status').textContent = 'ON (Mover)';
+    renderer.domElement.addEventListener('pointerdown', onPointerDownForDrag, false);
+    showAlert('Modo Mover activado.');
+  } else {
+    controls.enabled = true;
+    document.getElementById('lock-status').textContent = 'OFF (Rotar)';
+    renderer.domElement.removeEventListener('pointerdown', onPointerDownForDrag, false);
+    showAlert('Modo Rotar activado.');
+  }
+}
+
+/* Simple drag for moving model in normal (non-AR) mode */
+let dragObject = null;
+const pointer = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
+
+function onPointerDownForDrag(event){
+  pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  if (!currentModel) return;
+  const intersects = raycaster.intersectObjects(currentModel.children, true);
+  if (intersects.length > 0){
+    dragObject = modelContainer;
+    renderer.domElement.addEventListener('pointermove', onPointerMoveForDrag, false);
+    renderer.domElement.addEventListener('pointerup', onPointerUpForDrag, false);
+    showAlert('Arrastrando modelo...');
+  }
+}
+function onPointerMoveForDrag(event){
+  if (!dragObject) return;
+  const moveX = event.movementX || 0;
+  const moveY = event.movementY || 0;
+  dragObject.position.x += moveX * 0.005;
+  dragObject.position.y -= moveY * 0.005;
+  if (!isARMode){
+    document.getElementById('ar-x-slider').value = dragObject.position.x;
+    document.getElementById('ar-y-slider').value = dragObject.position.y;
+    document.getElementById('ar-x-value').textContent = dragObject.position.x.toFixed(1);
+    document.getElementById('ar-y-value').textContent = dragObject.position.y.toFixed(1);
+  }
+}
+function onPointerUpForDrag(){
+  dragObject = null;
+  renderer.domElement.removeEventListener('pointermove', onPointerMoveForDrag, false);
+  renderer.domElement.removeEventListener('pointerup', onPointerUpForDrag, false);
+}
+
+/* Update model placement from sliders (non-AR) */
+function updateModelPlacement(){
+  if (!modelContainer) return;
+  const x = parseFloat(document.getElementById('ar-x-slider').value);
+  const y = parseFloat(document.getElementById('ar-y-slider').value);
+  const zRot = parseFloat(document.getElementById('ar-z-slider').value) * Math.PI/180;
+  modelContainer.position.set(x, y, -2);
+  modelContainer.rotation.z = zRot;
+  document.getElementById('ar-x-value').textContent = x.toFixed(1);
+  document.getElementById('ar-y-value').textContent = y.toFixed(1);
+  document.getElementById('ar-z-value').textContent = (zRot * 180/Math.PI).toFixed(0);
+}
+
+/* Scale adjust (buttons) */
+function adjustScale(delta){
+  if (!currentModel) return;
+  currentModel.scale.x = Math.max(0.1, currentModel.scale.x + delta);
+  currentModel.scale.y = Math.max(0.1, currentModel.scale.y + delta);
+  currentModel.scale.z = Math.max(0.1, currentModel.scale.z + delta);
+  const shadow = currentModel.getObjectByName('contactShadow');
+  if (shadow) shadow.scale.set(currentModel.scale.x*2, currentModel.scale.x*2, 1);
+}
+
+/* Select model UI */
+function toggleModelSelector(show){
+  const modal = document.getElementById('model-selector-modal');
+  if (show){ modal.classList.remove('pointer-events-none','opacity-0'); modal.classList.add('opacity-100'); }
+  else { modal.classList.remove('opacity-100'); modal.classList.add('pointer-events-none','opacity-0'); }
+}
+function selectModel(name){
+  toggleModelSelector(false);
+  loadModelByName(name);
+}
+
+/* Reusable: on load */
+window.onload = function(){
+  initThree();
+  loadModelByName('Duck');
+  animate();
+  // initialize UI state
+  document.getElementById('placement-controls').classList.add('hidden');
+  document.getElementById('ar-mode-status').textContent = 'Inactivo';
+  document.getElementById('lock-status').textContent = 'OFF (Rotar)';
+  document.getElementById('control-panel').classList.remove('is-visible');
+};
+
+/* Extra helpers for menu toggle */
+window.toggleControlPanel = function(){
+  const panel = document.getElementById('control-panel');
+  const menuIcon = document.getElementById('menu-icon');
+  const closeIcon = document.getElementById('close-icon');
+  const visible = panel.classList.toggle('is-visible');
+  if (visible){ menuIcon.classList.add('hidden'); closeIcon.classList.remove('hidden'); }
+  else { menuIcon.classList.remove('hidden'); closeIcon.classList.add('hidden'); }
+};
+
+/* Small helpers for external accessibility */
+window.toggleARMode = toggleARMode;
+window.toggleMotionTracking = toggleMotionTracking;
+window.toggleInteractionMode = toggleInteractionMode;
+window.adjustScale = adjustScale;
+window.updateModelPlacement = updateModelPlacement;
+window.selectModel = selectModel;
+window.toggleModelSelector = toggleModelSelector;
+window.startRelocate = startRelocate;
+window.resetScale = resetScale;
+
+
+    // --- Sistema de anclaje pseudo-realista (profundidad compensada) ---
+let anchorActive = false;
+let lastZ = 0;
+let smoothedDelta = 0;
+const anchorCompensation = 0.002; // sensibilidad (ajustar entre 0.001–0.003)
+
+function enableAnchorEffect() {
+  anchorActive = true;
+  window.addEventListener('devicemotion', handleMotion, true);
+}
+
+function disableAnchorEffect() {
+  anchorActive = false;
+  window.removeEventListener('devicemotion', handleMotion, true);
+}
+
+function handleMotion(event) {
+  if (!anchorActive || !modelContainer) return;
+
+  const accZ = event.accelerationIncludingGravity?.z || 0;
+
+  // filtro de suavizado
+  smoothedDelta = smoothedDelta * 0.9 + (accZ - lastZ) * 0.1;
+  lastZ = accZ;
+
+  // compensar desplazamiento en Z (pequeños ajustes)
+  const compensation = -smoothedDelta * anchorCompensation;
+  modelContainer.position.z += compensation;
+
+  // limitar desplazamiento para no alejarse demasiado
+  modelContainer.position.z = THREE.MathUtils.clamp(modelContainer.position.z, -4, -1);
+}
+
+
+    
+</script>
 </body>
 </html>
