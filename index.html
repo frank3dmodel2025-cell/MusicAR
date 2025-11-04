@@ -3,126 +3,226 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web AR de Coche 3D</title>
+    <title>Visor AR Nativo - Galería de Modelos</title>
     <!-- Script para importar el componente Model-viewer de Google -->
     <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <!-- Carga de Tailwind CSS para un diseño limpio y moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
     <style>
-        /* Estilos generales para ocupar toda la pantalla */
+        /* Estilos base */
         body {
+            font-family: 'Inter', sans-serif;
             margin: 0;
             padding: 0;
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f7f7;
+            background-color: #f0f4f8;
+            overflow: hidden;
         }
 
-        /* El componente model-viewer ocupa la mayor parte de la ventana */
-        model-viewer {
+        /* Contenedor del Visor 3D */
+        #model-container {
             width: 100vw;
-            height: 90vh; /* Usa 90vh para dejar espacio para el menú o el botón AR */
-            background-color: #e0f2f1; /* Un fondo suave para el visor 3D */
+            height: 90vh; /* Altura principal para el visor */
+        }
+
+        /* Estilo para el componente principal model-viewer */
+        model-viewer {
+            width: 100%;
+            height: 100%;
+            background-color: #e2e8f0;
             border: none;
         }
 
-        /* Estilos para el botón AR personalizado */
+        /* Estilos para el botón AR */
         #ar-button {
-            /* Positionamiento absoluto para colocarlo en la esquina inferior derecha */
+            /* Colocación y estilo del botón flotante */
             position: absolute;
-            right: 35px;
-            bottom: 35px;
+            right: 20px;
+            bottom: 20px;
             
-            /* Estilos de botón */
-            width: 150px;
-            height: 50px;
-            background-color: #00897b; /* Color verde azulado */
+            background-color: #10b981; /* Verde esmeralda de Tailwind */
             color: white;
             border: none;
-            border-radius: 12px;
-            padding: 10px 20px;
+            border-radius: 9999px; /* Píldora redondeada */
+            padding: 12px 24px;
             font-size: 1rem;
-            font-weight: bold;
+            font-weight: 600;
             cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: background-color 0.3s ease, transform 0.1s ease;
-            z-index: 10; /* Asegura que esté por encima del modelo */
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+            transition: all 0.2s ease;
+            z-index: 10;
         }
 
         #ar-button:hover {
-            background-color: #00695c;
+            background-color: #059669;
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.6);
         }
-
-        #ar-button:active {
-            transform: scale(0.98);
-        }
-
-        /* Contenedor para el título y descripción */
-        .header-bar {
-            width: 100%;
-            height: 10vh;
+        
+        /* Estilos para el menú de modelos */
+        #model-selector {
             display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
+            height: 10vh; /* Altura para el menú */
             background-color: #ffffff;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+            padding: 0 1rem;
         }
 
-        .header-bar h1 {
-            font-size: 1.2rem;
-            color: #004d40;
-            margin: 0;
+        .model-btn {
+            background-color: #ffffff;
+            color: #1f2937;
+            border: 2px solid #d1d5db;
+            padding: 8px 16px;
+            margin: 0 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 500;
         }
 
-        /* Media Query para móvil: ajustar la posición del botón */
-        @media (max-width: 600px) {
+        .model-btn.active, .model-btn:hover {
+            background-color: #3b82f6; /* Azul */
+            color: white;
+            border-color: #3b82f6;
+        }
+        
+        /* Ajuste para móviles */
+        @media (max-width: 640px) {
             #ar-button {
-                right: 20px;
-                bottom: 20px;
-                width: 120px;
-                height: 45px;
-                font-size: 0.9rem;
+                padding: 10px 18px;
+                font-size: 0.875rem;
+                right: 10px;
+                bottom: 10px;
+            }
+            #model-selector {
+                height: auto;
+                padding: 10px 0;
             }
         }
+
     </style>
 </head>
 <body>
-    <div class="header-bar">
-        <h1>Modelo 3D Interactivo (Listo para AR)</h1>
+
+    <!-- Bar-Menu de Selección de Modelo -->
+    <div id="model-selector">
+        <button class="model-btn active" data-model="Duck">Pato</button>
+        <button class="model-btn" data-model="Helmet">Casco</button>
+        <button class="model-btn" data-model="BoomBox">BoomBox</button>
     </div>
 
-    <!-- 
-        El componente model-viewer con atributos clave:
-        - src: Ruta al modelo GLB para visualización web/Android.
-        - ios-src: Ruta al modelo USDZ para Quick Look en iOS.
-        - ar: Habilita la funcionalidad de Realidad Aumentada.
-        - camera-controls: Permite al usuario rotar el modelo.
-        - touch-action: Indicación visual de que el modelo es interactivo.
-        - shadow-intensity: Añade una sombra para realismo.
-        - alt: Texto descriptivo para accesibilidad.
-    -->
-    <model-viewer 
-        src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-        ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
-        ar
-        camera-controls
-        touch-action="pan-y"
-        shadow-intensity="1"
-        alt="Un modelo 3D de un astronauta"
-        exposure="1.0"
-        shadow-softness="1">
+    <!-- Contenedor del Modelo 3D con model-viewer -->
+    <div id="model-container">
+        <!-- 
+            Usamos el modelo Duck como inicial. 
+            NOTA: Los modelos .usdz son NECESARIOS para la RA nativa en iOS (Quick Look).
+            Los modelos .glb son para visualización web y RA nativa en Android (WebXR).
+        -->
+        <model-viewer 
+            id="ar-viewer"
+            src="https://modelviewer.dev/shared-assets/models/Duck.glb"
+            ios-src="https://modelviewer.dev/shared-assets/models/Duck.usdz"
+            ar
+            camera-controls
+            touch-action="pan-y"
+            shadow-intensity="1"
+            alt="Modelo 3D para Realidad Aumentada"
+            exposure="1.2"
+            shadow-softness="0.5"
+            disable-tap="true"
+        >
+            <!-- Botón personalizado para iniciar la Realidad Aumentada -->
+            <button slot="ar-button" id="ar-button">
+                Ver en AR 🚀
+            </button>
+        </model-viewer>
+    </div>
 
-        <!-- Botón personalizado para iniciar la Realidad Aumentada -->
-        <button slot="ar-button" id="ar-button">
-            Iniciar AR
-        </button>
+    <script>
+        // Mapeo de nombres de modelo a sus URLs (usan los mismos modelos de ejemplo GLTF)
+        const MODELS = {
+            Duck: { 
+                glb: 'https://modelviewer.dev/shared-assets/models/Duck.glb',
+                usdz: 'https://modelviewer.dev/shared-assets/models/Duck.usdz',
+                alt: 'Pato de juguete 3D'
+            },
+            Helmet: { 
+                glb: 'https://modelviewer.dev/shared-assets/models/DamagedHelmet.glb',
+                usdz: 'https://modelviewer.dev/shared-assets/models/DamagedHelmet.usdz',
+                alt: 'Casco espacial dañado'
+            },
+            BoomBox: { 
+                glb: 'https://modelviewer.dev/shared-assets/models/BoomBox.glb',
+                usdz: 'https://modelviewer.dev/shared-assets/models/BoomBox.usdz',
+                alt: 'Radiograbadora 3D'
+            }
+        };
 
-    </model-viewer>
+        const viewer = document.getElementById('ar-viewer');
+        const modelButtons = document.querySelectorAll('.model-btn');
 
-    <!--
-        NOTA IMPORTANTE: 
-        El video original usa un modelo de coche, pero dado que no podemos subir archivos 3D directamente, 
-        estamos usando el modelo de 'Astronauta' de los ejemplos de Google como sustituto, el cual está 
-        disponible públicamente y funciona perfectamente con la función AR.
-        Para usar tu propio modelo, reemplaza las URLs de 'src' e 'ios-src' con las rutas a tus archivos GLB y USDZ.
-    -->
+        // Función para cambiar el modelo activo
+        function changeModel(modelName) {
+            const modelData = MODELS[modelName];
+            
+            if (!modelData) return;
+
+            // 1. Actualiza la fuente del modelo para el visor
+            viewer.src = modelData.glb;
+            viewer.setAttribute('ios-src', modelData.usdz);
+            viewer.setAttribute('alt', modelData.alt);
+
+            // 2. Reinicia la cámara y animación (opcional, para refrescar la vista)
+            viewer.cameraOrbit = '0deg 75deg 105%';
+            viewer.fieldOfView = 'auto';
+
+            // 3. Actualiza los estilos de los botones para reflejar el modelo activo
+            modelButtons.forEach(btn => {
+                if (btn.getAttribute('data-model') === modelName) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        // Asigna el evento de click a todos los botones de modelo
+        modelButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const modelName = button.getAttribute('data-model');
+                changeModel(modelName);
+            });
+        });
+
+        // Inicializa el modelo al cargar la página (aunque ya está en el HTML, es buena práctica)
+        window.onload = () => {
+             // Pequeña corrección visual al cargar
+             viewer.cameraOrbit = '0deg 75deg 105%';
+        };
+        
+        // Manejo de errores de RA (en caso de que el dispositivo no sea compatible)
+        viewer.addEventListener('error', (event) => {
+            // Este evento se dispara si el modelo no puede cargarse o si hay un problema grave de AR.
+            console.error('Error en model-viewer:', event);
+        });
+
+        viewer.addEventListener('ar-status', (event) => {
+            if (event.detail.status === 'failed') {
+                // Notificación simple al usuario si AR falla
+                const arButton = document.getElementById('ar-button');
+                arButton.textContent = 'AR NO SOPORTADO';
+                arButton.style.backgroundColor = '#ef4444'; // Rojo de error
+                console.warn('Realidad Aumentada fallida. Asegúrate de usar un dispositivo compatible.');
+
+                setTimeout(() => {
+                    arButton.textContent = 'Ver en AR 🚀';
+                    arButton.style.backgroundColor = '#10b981';
+                }, 3000);
+            }
+        });
+
+    </script>
 
 </body>
 </html>
