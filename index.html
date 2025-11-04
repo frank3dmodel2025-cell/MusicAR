@@ -3,219 +3,226 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR AR - Casco 3D (Todo en uno)</title>
+    <title>WebAR Básico</title>
+    <!-- 1. Cargar Tailwind CSS para estilos rápidos -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- 
-      SECCIÓN DE ESTILOS (CSS)
-      Todo el CSS que estaba en style.css ahora está dentro de esta etiqueta <style>.
-    -->
-    <style>
-        /* Estilos generales para resetear márgenes y asegurar que ocupe toda la pantalla */
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            color: #fff;
-            background-color: #111;
-        }
-
-        /* El contenedor principal donde se añadirá el botón y el lienzo */
-        #container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* El lienzo (canvas) donde se renderiza la escena 3D */
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
-
-        /* 
-          El botón de AR (generado por ARButton.js) se posicionará por defecto.
-          Podemos añadir un estilo personalizado si quisiéramos.
-        */
-        #ARButton {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 12px 24px;
-            border: 1px solid #fff;
-            border-radius: 4px;
-            background: rgba(0, 0, 0, 0.4);
-            color: #fff;
-            font-size: 16px;
-            cursor: pointer;
-            z-index: 999;
-        }
-    </style>
-
-    <!-- 
-      IMPORT MAP
-      Define cómo el navegador encuentra los módulos de three.js directamente desde la web.
-      Esto nos permite usar "import" en nuestro script sin un paso de compilación.
-    -->
+    <!-- 2. Import Map -->
     <script type="importmap">
     {
         "imports": {
-            "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/"
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
         }
     }
     </script>
+
+    <style>
+        /* Estilos adicionales */
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Evitar scroll */
+            font-family: 'Inter', sans-serif;
+        }
+        #ARButton {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.75rem 1.5rem;
+            background-color: #4A90E2; /* Azul bonito */
+            color: white;
+            font-weight: bold;
+            border-radius: 9999px; /* Píldora */
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+            z-index: 100;
+        }
+        #ARButton:hover {
+            background-color: #357ABD;
+        }
+    </style>
 </head>
-<body>
-    <!-- El botón de AR y el lienzo de renderizado se añadirán aquí mediante JavaScript -->
-    <div id="container"></div>
+<body class="bg-gray-900 text-white">
 
-    <!-- 
-      SECCIÓN DE LÓGICA (JavaScript)
-      Todo el código que estaba en main.js ahora está dentro de esta etiqueta <script>.
-      Es importante que tenga el atributo "type='module'" para que los "import" funcionen.
-    -->
+    <!-- 3. Contenedor para las instrucciones INICIALES -->
+    <div id="instructions" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 p-6 bg-black bg-opacity-50 rounded-lg shadow-lg text-center">
+        <h1 class="text-2xl font-bold mb-2">WebAR Simple</h1>
+        <p class="text-gray-300">Haz clic en "Iniciar AR" en un dispositivo compatible.</p>
+        <p class="text-sm text-gray-400">(Asegúrate de estar en un entorno bien iluminado)</p>
+    </div>
+
+    <!-- 4. (NUEVO) Contenedor para las instrucciones EN AR -->
+    <div id="ar-instructions" class="hidden absolute bottom-24 left-1/2 -translate-x-1/2 z-10 p-3 bg-black bg-opacity-60 rounded-lg text-center w-3/4">
+        <p class="text-sm">Apunta al suelo y <span class="font-bold">toca la pantalla</span> para colocar el modelo.</p>
+    </div>
+
+
+    <!-- 5. El script principal de Three.js y WebXR -->
     <script type="module">
-        // --- 1. IMPORTACIONES ---
-        // Importamos los módulos necesarios de la librería three.js
+        // --- IMPORTACIONES ESENCIALES ---
+        // Ahora podemos usar las rutas cortas gracias al "importmap"
         import * as THREE from 'three';
-        // ARButton nos crea un botón para entrar a la experiencia AR de forma sencilla
-        import { ARButton } from 'three/addons/webxr/ARButton.js';
-        // GLTFLoader nos permite cargar modelos en formato glTF/glb, el estándar para la web
-        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+        import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
 
-        // --- 2. VARIABLES GLOBALES ---
-        // Estas variables necesitan ser accesibles en varias funciones
+
+        // --- VARIABLES GLOBALES ---
         let camera, scene, renderer;
-        let model; // Variable para almacenar nuestro modelo 3D
-        let controller;
+        let loader; // Cargador de modelos
+        let model;  // Nuestro modelo 3D
+        let reticle; // Un cursor visual para mostrar dónde colocaremos el objeto
+        let controller; // El "dedo" del usuario (controlador de entrada)
 
-        // --- 3. INICIALIZACIÓN ---
-        // Llamamos a la función principal para empezar todo
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
+
+        // --- INICIALIZACIÓN ---
         init();
+        animate(); // Iniciar el bucle de renderizado
 
         function init() {
-            // Obtenemos el contenedor del HTML
-            const container = document.getElementById('container');
-
-            // --- ESCENA ---
-            // La escena es el contenedor de todos los objetos 3D, luces y cámaras
+            // --- CONFIGURACIÓN BÁSICA DE LA ESCENA ---
             scene = new THREE.Scene();
-
-            // --- CÁMARA ---
-            // La cámara define el punto de vista. En AR, su posición y rotación
-            // serán controladas por el dispositivo físico.
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-            // --- RENDERER ---
-            // El renderer dibuja la escena en la pantalla (en un elemento <canvas>)
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            // Habilitamos el soporte para WebXR
-            renderer.xr.enabled = true;
-            container.appendChild(renderer.domElement);
-
-            // --- BOTÓN DE AR ---
-            // Creamos el botón para iniciar la sesión de AR.
-            // El botón comprobará si el dispositivo es compatible.
-            const arButton = ARButton.createButton(renderer, {
-                requiredFeatures: ['hit-test'] // 'hit-test' es opcional pero útil para detectar superficies
-            });
-            container.appendChild(arButton);
-
-            // --- LUCES ---
-            // Añadimos luces para que el modelo 3D no se vea plano y oscuro.
-            // Luz ambiental: ilumina todos los objetos de la escena de manera uniforme.
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            // Luces: necesarias para que el modelo no se vea negro
+            const ambientLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            ambientLight.position.set(0.5, 1, 0.25);
             scene.add(ambientLight);
 
-            // Luz direccional: simula la luz del sol.
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            directionalLight.position.set(2, 3, 4);
-            scene.add(directionalLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(0.1, 1, 0);
+            scene.add(dirLight);
 
-            // --- CARGA DEL MODELO 3D ---
-            // Usamos GLTFLoader para cargar el modelo del casco.
-            const loader = new GLTFLoader();
-            const modelURL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf';
-            
-            loader.load(
-                modelURL,
-                // Función que se ejecuta cuando el modelo se ha cargado correctamente
-                function (gltf) {
-                    model = gltf.scene;
-                    
-                    // Inicialmente, el modelo no es visible hasta que el usuario lo coloque
-                    model.visible = false;
+            // --- RENDERER (EL LIENZO 3D) ---
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            // ¡Habilitar WebXR!
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
 
-                    // Opcional: Escalar el modelo si es muy grande o muy pequeño
-                    model.scale.set(0.2, 0.2, 0.2);
+            // --- BOTÓN DE AR ---
+            const arButton = ARButton.createButton(renderer, {
+                requiredFeatures: ['hit-test']
+            });
+            document.body.appendChild(arButton);
 
-                    scene.add(model);
-                    console.log("Modelo 3D cargado correctamente.");
-                },
-                // Función de progreso (opcional)
-                undefined,
-                // Función que se ejecuta si hay un error al cargar
-                function (error) {
-                    console.error('Error al cargar el modelo 3D:', error);
-                }
-            );
+            // Ocultar instrucciones cuando entramos en AR
+            renderer.xr.addEventListener('sessionstart', () => {
+                document.getElementById('instructions').style.display = 'none';
+                // (NUEVO) Mostrar las instrucciones de AR
+                document.getElementById('ar-instructions').style.display = 'block';
+            });
+            renderer.xr.addEventListener('sessionend', () => {
+                document.getElementById('instructions').style.display = 'block';
+                // (NUEVO) Ocultar las instrucciones de AR
+                document.getElementById('ar-instructions').style.display = 'none';
+            });
 
-            // --- CONTROLADOR (INTERACCIÓN) ---
-            // WebXR usa un "controlador" para gestionar las interacciones, como un toque en la pantalla.
+
+            // --- CARGAR EL MODELO 3D ---
+            const modelUrl = 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
+            loader = new GLTFLoader();
+            loader.load(modelUrl, (gltf) => {
+                model = gltf.scene;
+                model.visible = false;
+                model.scale.set(0.2, 0.2, 0.2); 
+                scene.add(model);
+                console.log("Modelo Astronauta cargado.");
+            }, undefined, (error) => {
+                console.error("Error cargando el modelo:", error);
+            });
+
+            // --- RETÍCULO (CURSOR DE AR) ---
+            const reticleGeo = new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2);
+            const reticleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            reticle = new THREE.Mesh(reticleGeo, reticleMat);
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false; // Solo visible cuando detecta un suelo
+            scene.add(reticle);
+
+            // --- CONTROLADOR (EVENTO DE TAP) ---
             controller = renderer.xr.getController(0);
-            // Añadimos un listener para el evento 'select' (toque en la pantalla)
             controller.addEventListener('select', onSelect);
             scene.add(controller);
 
-            // --- CICLO DE ANIMACIÓN ---
-            // setAnimationLoop es la forma correcta de crear un bucle de renderizado para WebXR.
-            renderer.setAnimationLoop(renderLoop);
-
-            // --- RESPONSIVIDAD ---
-            // Ajustar la cámara y el renderer si la ventana cambia de tamaño
+            // Manejar redimensionamiento de la ventana
             window.addEventListener('resize', onWindowResize);
         }
 
-        // --- 4. FUNCIÓN DE INTERACCIÓN (onSelect) ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- COLOCAR EL OBJETO AL TOCAR LA PANTALLA ---
         function onSelect() {
-            // Esta función se llama cuando el usuario toca la pantalla.
-            if (model && !model.visible) {
-                // Si el modelo está cargado pero no es visible, lo colocamos en la escena.
-                // Lo posicionamos un poco delante de la cámara.
-                // La posición (0, 0, -1) es 1 metro delante de la cámara.
-                model.position.set(0, 0, -1).applyMatrix4(controller.matrixWorld);
-                model.quaternion.setFromRotationMatrix(controller.matrixWorld);
-                
-                // Hacemos visible el modelo
+            if (reticle.visible && model) {
+                // Copiar la posición y orientación del retículo a nuestro modelo
+                model.position.setFromMatrixPosition(reticle.matrix);
+                model.quaternion.setFromRotationMatrix(reticle.matrix);
                 model.visible = true;
+
+                // (NUEVO) Ocultar las instrucciones de AR una vez que el modelo se ha colocado
+                const arInstructions = document.getElementById('ar-instructions');
+                if (arInstructions) arInstructions.style.display = 'none';
             }
         }
 
-        // --- 5. BUCLE DE RENDERIZADO (renderLoop) ---
-        function renderLoop() {
-            // Esta función se ejecuta en cada frame (unas 60 veces por segundo).
-            
-            // Si el modelo existe y está visible, lo hacemos rotar suavemente.
-            if (model && model.visible) {
-                model.rotation.y += 0.005; // Rotación sobre el eje Y
+        // --- BUCLE DE RENDERIZADO (SE EJECUTA CADA FRAME) ---
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render(timestamp, frame) {
+            // 'frame' solo existe cuando estamos en una sesión de AR
+            if (frame) {
+                const session = renderer.xr.getSession();
+
+                // 1. Pedir la fuente de "hit-test" (detección de superficies) si no la tenemos
+                if (!hitTestSourceRequested) {
+                    session.requestReferenceSpace('viewer').then((referenceSpace) => {
+                        session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+                            hitTestSource = source;
+                        });
+                    });
+                    hitTestSourceRequested = true;
+                }
+
+                // 2. Si tenemos la fuente, buscar superficies
+                if (hitTestSource) {
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+                    // 3. Si encontramos una superficie...
+                    if (hitTestResults.length > 0) {
+                        const hit = hitTestResults[0];
+                        const hitMatrix = hit.getPose(renderer.xr.getReferenceSpace()).transform.matrix;
+                        
+                        reticle.visible = true;
+                        reticle.matrix.fromArray(hitMatrix);
+                    } else {
+                        reticle.visible = false;
+                    }
+                }
             }
 
-            // Renderizamos la escena desde la perspectiva de la cámara.
+            // 4. (Opcional) Rotar el modelo si ya es visible
+            if (model && model.visible) {
+                model.rotation.y += 0.005; // Rotación lenta
+            }
+
+            // 5. Renderizar la escena
             renderer.render(scene, camera);
         }
 
-        // --- 6. FUNCIÓN DE AJUSTE DE VENTANA (onWindowResize) ---
-        function onWindowResize() {
-            // Actualizamos la relación de aspecto de la cámara
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-
-            // Actualizamos el tamaño del renderer
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
     </script>
 </body>
 </html>
+
