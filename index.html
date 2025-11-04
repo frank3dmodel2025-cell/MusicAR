@@ -1,585 +1,546 @@
-<!DOCTYPE html>
-<html lang="es">
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ArtAR Viewer | Realidad Aumentada WebXR</title>
-    <!-- Carga de Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                }
-            }
-        }
-    </script>
-    <!-- Carga de Three.js y WebXR ARButton -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- CORRECCIÓN: Usando un CDN más robusto (unpkg) para el archivo de ejemplo ARButton.js para evitar el ReferenceError -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/ARButton.js"></script>
-    
-    <style>
-        /* Estilos personalizados y generales para un look minimalista */
-        body {
-            font-family: 'Inter', sans-serif;
-            margin: 0;
-            overflow: hidden; 
-        }
-        #ar-canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            touch-action: none; 
-        }
-        .gallery-card {
-            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-        }
-        .gallery-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
-        }
-        /* Estilo para el modo oscuro por defecto */
-        .dark-mode {
-            background-color: #1a1a1a;
-            color: #f3f4f6;
-        }
-        /* Estilo para el botón AR nativo */
-        #ARButton {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 12px 24px;
-            border: 1px solid white;
-            border-radius: 8px;
-            background: rgba(0, 0, 0, 0.5);
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
-            z-index: 60; 
-            transition: background 0.3s;
-        }
-        #ARButton:hover {
-            background: rgba(0, 0, 0, 0.7);
-        }
-
-        /* Estilo del retículo (indicador de superficie) */
-        .reticle-visible {
-            opacity: 1 !important;
-        }
-        
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Art AR — WebXR & Fallback</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#f7f3ed;--panel:#ffffffcc;--accent:#4f46e5;--muted:#6b7280}
+  html,body{height:100%;margin:0;font-family:'Poppins',sans-serif;background:var(--bg);overflow:hidden}
+  #container{position:fixed;inset:0;display:flex;align-items:stretch;}
+  canvas{display:block;width:100%;height:100vh;z-index:10}
+  video#cameraFeed{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:5;display:none;}
+  .ui{
+    position:fixed;right:16px;top:16px;z-index:60;
+    background:var(--panel);backdrop-filter:blur(6px);border-radius:12px;padding:12px;box-shadow:0 8px 30px rgba(20,20,40,0.12);
+    min-width:180px;
+  }
+  .ui h3{margin:0 0 6px 0;font-size:14px}
+  .btn{display:inline-block;padding:8px 12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+  .btn.gray{background:#e5e7eb;color:#111}
+  .gallery{display:flex;gap:8px;margin-top:8px;overflow:hidden}
+  .thumb{width:48px;height:48px;border-radius:6px;object-fit:cover;cursor:pointer;border:2px solid transparent}
+  .thumb.selected{border-color:var(--accent)}
+  #placementHint{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:rgba(0,0,0,0.6);color:#fff;padding:8px 12px;border-radius:999px;z-index:60;display:none}
+  #note{font-size:12px;color:var(--muted);margin-top:8px}
+  .small{font-size:12px;color:var(--muted)}
+</style>
 </head>
+<body>
+  <div id="container">
+    <video id="cameraFeed" autoplay playsinline muted></video>
+    <div id="three-dom"></div>
+    <canvas id="xr-canvas"></canvas>
+  </div>
 
-<body class="dark-mode">
-
-    <!-- 1. Contenedor del Canvas de Three.js -->
-    <div id="canvas-container" class="absolute inset-0 z-20">
-        <canvas id="ar-canvas"></canvas>
+  <div class="ui" id="ui-panel">
+    <h3>Art AR — Gallery</h3>
+    <div>
+      <button id="enter-ar-btn" class="btn">Enter AR</button>
+      <button id="start-sim-btn" class="btn gray">Simulate AR</button>
     </div>
 
-    <!-- 2. Pantalla de Galería (Inicial) -->
-    <div id="gallery-screen" class="absolute inset-0 z-50 p-4 overflow-y-auto dark-mode transition-opacity duration-500">
-        <div class="max-w-7xl mx-auto">
-            <h1 class="text-4xl font-extrabold mb-8 text-center pt-8">ArtAR Viewer (WebXR)</h1>
-            <p class="text-center mb-10 text-gray-400">Selecciona una obra y usa el botón "ENTER AR" para la experiencia en Realidad Aumentada real.</p>
-
-            <!-- Grid de Obras -->
-            <div id="art-gallery" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-12">
-                <!-- Las tarjetas de arte se insertarán aquí por JS -->
-            </div>
-        </div>
+    <div id="gallery" class="gallery" aria-label="Art gallery" style="margin-top:10px">
+      <!-- thumbnails -->
+      <img class="thumb selected" data-src="https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?w=1024&q=80&auto=format&fit=crop" src="https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?w=200&q=60&auto=format&fit=crop" alt="Art 1">
+      <img class="thumb" data-src="https://images.unsplash.com/photo-1513353449046-5f1c22e5a9e9?w=1024&q=80&auto=format&fit=crop" src="https://images.unsplash.com/photo-1513353449046-5f1c22e5a9e9?w=200&q=60&auto=format&fit=crop" alt="Art 2">
+      <img class="thumb" data-src="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1024&q=80&auto=format&fit=crop" src="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200&q=60&auto=format&fit=crop" alt="Art 3">
     </div>
 
-    <!-- 3. Controles Flotantes para Modo AR -->
-    <!-- Estos controles solo se mostrarán una vez que el objeto haya sido colocado -->
-    <div id="ar-controls" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex flex-wrap justify-center space-x-2 md:space-x-4 p-2 bg-gray-900/70 backdrop-blur-sm rounded-xl transition-opacity duration-300 opacity-0 pointer-events-none">
+    <div id="note" class="small">Select an artwork then <strong>Enter AR</strong>. Tap the reticle to place the frame. Use pinch to scale and drag to rotate after placement.</div>
+  </div>
 
-        <!-- Botón Volver/Cambiar Obra -->
-        <button id="btn-back" class="p-3 md:p-4 text-white bg-red-600 hover:bg-red-700 rounded-full shadow-lg transition duration-150 transform hover:scale-105" title="Volver a Galería">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gallery-vertical-end"><path d="M7 2h10"/><path d="M10 6h4"/><path d="M5 10h14"/><path d="M8 14h8"/><path d="M3 18h18"/><path d="M11 22h2"/></svg>
-        </button>
+  <div id="placementHint">Move your phone to detect surfaces</div>
 
-        <!-- Botón Escalar -->
-        <button id="btn-scale" data-mode="scale" class="p-3 md:p-4 text-white bg-blue-600 hover:bg-blue-700 rounded-full shadow-lg transition duration-150 transform hover:scale-105 active-mode" title="Modo Escala (Pinch)">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize-2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><path d="M21 3 14 10"/><path d="M3 21 10 14"/></svg>
-        </button>
+  <!-- Three.js + modules -->
+  <script type="module">
+  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+  import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
+  import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/webxr/ARButton.js';
+  import { DeviceOrientationControls } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/DeviceOrientationControls.js';
 
-        <!-- Botón Mover -->
-        <button id="btn-move" data-mode="move" class="p-3 md:p-4 text-white bg-yellow-600 hover:bg-yellow-700 rounded-full shadow-lg transition duration-150 transform hover:scale-105" title="Modo Mover (Arrastrar)">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-move-horizontal"><polyline points="18 8 22 12 18 16"/><polyline points="6 8 2 12 6 16"/><line x1="2" x2="22" y1="12" y2="12"/></svg>
-        </button>
+  /*****************************************************************************
+   *  Overview:
+   *  - Try WebXR immersive-ar first (hit-test + anchors)
+   *  - If not supported, provide simulated AR fallback using camera + gyro
+   *  - Art object: a frame (thin box) + inner plane with chosen texture
+   *  - After placing: allow rotate (one-finger drag) and scale (pinch)
+   *****************************************************************************/
 
-        <!-- Botón Rotar -->
-        <button id="btn-rotate" data-mode="rotate" class="p-3 md:p-4 text-white bg-green-600 hover:bg-green-700 rounded-full shadow-lg transition duration-150 transform hover:scale-105" title="Modo Rotar (Arrastrar)">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-3d"><path d="M5.768 18.066a7.957 7.957 0 0 1-2.094-1.244"/><path d="M8.258 20.354a7.957 7.957 0 0 0 4.74-1.424"/><path d="M10.95 21.9a7.957 7.957 0 0 0 1.01-1.285"/><path d="M13.682 20.353a7.957 7.957 0 0 0 4.74-1.424"/><path d="M18.232 18.066a7.957 7.957 0 0 0 2.094-1.244"/><path d="M21.572 13.9a7.957 7.957 0 0 0 .096-1.549"/><path d="M21.5 12.001c0-4.418-3.582-7.999-8-7.999S5.5 7.583 5.5 12.001"/><path d="M5.628 13.901a7.957 7.957 0 0 1-.096-1.55"/><path d="M4.328 16.829a7.957 7.957 0 0 1-1.07-1.353"/><path d="M1.002 12.593a7.957 7.957 0 0 1 1.07-1.353"/><circle cx="12" cy="12" r="10"/></svg>
-        </button>
+  // DOM
+  const enterARBtn = document.getElementById('enter-ar-btn');
+  const startSimBtn = document.getElementById('start-sim-btn');
+  const placementHint = document.getElementById('placementHint');
+  const gallery = document.getElementById('gallery');
+  const cameraFeed = document.getElementById('cameraFeed');
 
-        <!-- Botón Captura/Guardar -->
-        <button id="btn-capture" class="p-3 md:p-4 text-white bg-gray-500 hover:bg-gray-600 rounded-full shadow-lg transition duration-150 transform hover:scale-105" title="Guardar Captura">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-camera"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-        </button>
-    </div>
+  // THREE core
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 50);
+  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, canvas: document.getElementById('xr-canvas') });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.xr.enabled = true;
+  document.getElementById('three-dom').appendChild(renderer.domElement);
 
-    <!-- 4. Contenedor del Botón AR Nativo (de Three.js) -->
-    <div id="ar-button-container" class="absolute bottom-10 w-full z-60 text-center">
-        <!-- El botón ARButton.js se inyectará aquí -->
-    </div>
+  // Lighting
+  const hemi = new THREE.HemisphereLight(0xffffff,0xbbbbff,0.8); scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(1,3,2); dir.castShadow=true; scene.add(dir);
 
-    <!-- 5. Mensaje Flotante (Para Captura o Errores) -->
-    <div id="message-box" class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 p-3 rounded-lg shadow-xl z-[100] transition-all duration-300 opacity-0 pointer-events-none">
-        Mensaje
-    </div>
+  // Reticle (placement indicator)
+  const reticle = new THREE.Mesh(
+    new THREE.RingGeometry(0.12, 0.18, 32).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({ color:0xffff00, transparent:true, opacity:0.9 })
+  );
+  reticle.matrixAutoUpdate = false;
+  reticle.visible = false;
+  scene.add(reticle);
 
+  // Model container & placed object
+  let placedRoot = null;      // Object3D parent for the placed artwork (anchored)
+  let placedAnchor = null;    // XRAnchor if available
+  let tempModel = null;       // internal 3D model (frame + plane)
+  let currentTextureURL = gallery.querySelector('.thumb.selected').dataset.src;
 
-<script>
-    // --- Configuración y Datos Iniciales ---
-    const ARTWORKS = [
-        { id: 'sunflower', name: 'Girasoles', artist: 'Vincent van Gogh', url: 'https://placehold.co/600x900/402830/ffffff?text=Girasoles' },
-        { id: 'scream', name: 'El Grito', artist: 'Edvard Munch', url: 'https://placehold.co/600x700/606060/ffffff?text=El+Grito' },
-        { id: 'starry', name: 'Noche Estrellada', artist: 'Vincent van Gogh', url: 'https://placehold.co/1000x800/202050/ffffff?text=Noche+Estrellada' },
-        { id: 'monalisa', name: 'Mona Lisa', artist: 'Leonardo da Vinci', url: 'https://placehold.co/600x900/7a574a/ffffff?text=Mona+Lisa' },
-        { id: 'guernica', name: 'Guernica', artist: 'Pablo Picasso', url: 'https://placehold.co/1600x700/303030/ffffff?text=Guernica' },
-    ];
+  // GLTF loader (if later you want a frame model)
+  const loader = new GLTFLoader();
 
-    // --- Variables Globales de Three.js y WebXR Estado ---
-    let scene, camera, renderer;
-    let artObject, currentArtwork, textureLoader;
-    
-    let arButton, hitTestSource = null, reticle;
-    let artPlaced = false;
-    let selectedArtURL = null;
+  // DeviceOrientation fallback controls
+  let deviceControls = null;
+  let simActive = false;
+  let simCameraStream = null;
 
-    // Estado de Interacción Táctil
-    const interaction = {
-        mode: 'move', // 'move', 'scale', 'rotate'
-        isDragging: false,
-        prevTouch: { x: 0, y: 0 },
-        prevDistance: 0,
-        // Almacenamiento del raycaster para la interacción post-colocación
-        raycaster: new THREE.Raycaster(),
-        pointer: new THREE.Vector2() 
-    };
+  // Helpers for gestures
+  let ongoingTouches = [];
+  function copyTouch(t){ return {id:t.identifier, x:t.clientX, y:t.clientY}; }
+  function getTouchById(id){ return ongoingTouches.find(t=>t.id===id); }
+  function updateTouch(id,x,y){ const t = getTouchById(id); if(t){ t.x=x; t.y=y; } }
+  function removeTouch(id){ ongoingTouches = ongoingTouches.filter(t=>t.id!==id); }
 
-    // --- Funciones de Utilidad ---
+  // Resize
+  window.addEventListener('resize', ()=> {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
 
-    /** Muestra un mensaje temporal flotante. */
-    function showMessage(text, duration = 3000) {
-        const msgBox = document.getElementById('message-box');
-        msgBox.textContent = text;
-        msgBox.classList.remove('opacity-0', 'pointer-events-none');
-        msgBox.classList.add('opacity-100');
+  /*********************** Build Artwork (frame + plane) *************************/
+  function buildArtwork(textureURL){
+    // Root group
+    const root = new THREE.Group();
 
-        setTimeout(() => {
-            msgBox.classList.remove('opacity-100');
-            msgBox.classList.add('opacity-0', 'pointer-events-none');
-        }, duration);
+    // Plane for art (1 unit width x 1.5 height base)
+    const width = 1.0, height = 1.5;
+    const geometry = new THREE.PlaneGeometry(width, height);
+    const texture = new THREE.TextureLoader().load(textureURL);
+    texture.encoding = THREE.sRGBEncoding;
+    const material = new THREE.MeshStandardMaterial({ map: texture, roughness:0.6, metalness:0.0 });
+    const plane = new THREE.Mesh(geometry, material);
+    plane.position.set(0,0,0.02); // slight offset forward
+    plane.castShadow = true;
+    plane.receiveShadow = false;
+    root.add(plane);
+
+    // Simple thin frame (a slightly bigger box)
+    const frameGeom = new THREE.BoxGeometry(width + 0.06, height + 0.06, 0.05);
+    const frameMat = new THREE.MeshStandardMaterial({ color:0x111111, metalness:0.2, roughness:0.6 });
+    const frame = new THREE.Mesh(frameGeom, frameMat);
+    frame.position.set(0,0,-0.01);
+    root.add(frame);
+
+    // Add subtle backplate to prevent see-through
+    const backGeom = new THREE.PlaneGeometry(width+0.08, height+0.08);
+    const backMat = new THREE.MeshStandardMaterial({ color:0x0e0e0e });
+    const back = new THREE.Mesh(backGeom, backMat);
+    back.position.set(0,0,-0.055);
+    root.add(back);
+
+    // Scale root to a comfortable default (we'll allow user scaling)
+    root.scale.setScalar(1.0);
+
+    return root;
+  }
+
+  /************************** WebXR: Hit test & anchors **************************/
+  let xrHitTestSource = null;
+  let xrRefSpace = null;
+
+  async function startXR(){
+    if(!navigator.xr) {
+      alert('WebXR not supported on this device/browser. Use "Simulate AR" button for fallback.');
+      return;
+    }
+    try{
+      const supported = await navigator.xr.isSessionSupported('immersive-ar');
+      if(!supported){
+        alert('immersive-ar not supported. Try latest Chrome on Android with ARCore.');
+        return;
+      }
+    }catch(e){
+      console.warn('XR check failed', e);
+      alert('WebXR check failed.');
+      return;
     }
 
-    /** Muestra la galería y oculta el visor AR/controles. */
-    function showGalleryView() {
-        document.getElementById('gallery-screen').classList.remove('opacity-0', 'pointer-events-none');
-        document.getElementById('ar-controls').classList.add('opacity-0', 'pointer-events-none');
-        
-        // Finaliza la sesión XR si está activa
-        if (renderer && renderer.xr.isPresenting) {
-            renderer.xr.getSession().end();
-        }
+    // Create session via ARButton helper (but we want more control, so we'll request manually)
+    const session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test', 'local-floor', 'anchors'],
+      optionalFeatures: ['dom-overlay'],
+      domOverlay: { root: document.body }
+    });
 
-        // Limpia el objeto y el retículo
-        if (artObject) scene.remove(artObject);
-        if (reticle) scene.remove(reticle);
-        artObject = null;
-        artPlaced = false;
+    renderer.xr.setSession(session);
+    // reference space for placing content
+    xrRefSpace = await session.requestReferenceSpace('local-floor');
 
-        // Limpia el canvas
-        if (renderer) renderer.clear();
+    // request a hit test source using 'viewer' reference space
+    const viewerSpace = await session.requestReferenceSpace('viewer');
+    xrHitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+
+    // show placement hint
+    placementHint.style.display = 'block';
+
+    // react to session end
+    session.addEventListener('end', ()=> {
+      cleanupXR();
+      placementHint.style.display = 'none';
+    });
+
+    // Input: handle select event (tap) to place object
+    session.addEventListener('select', (ev) => {
+      // place at reticle's current pose
+      if(reticle.visible){
+        placeArtworkAtReticle(ev.frame);
+      }
+    });
+
+    // start render loop via renderer.setAnimationLoop
+    renderer.setAnimationLoop(onXRFrame);
+  }
+
+  function cleanupXR(){
+    // remove anchor & placed object if any (but we may want to keep it; here we keep it)
+    xrHitTestSource = null;
+    xrRefSpace = null;
+    renderer.setAnimationLoop(null);
+    renderer.xr.setSession(null);
+  }
+
+  function onXRFrame(time, frame){
+    const session = frame.session;
+    // get viewer pose relative to reference space
+    const pose = frame.getViewerPose(xrRefSpace);
+    if(!pose){
+      renderer.render(scene, camera);
+      return;
     }
 
-    /** Muestra los controles flotantes. */
-    function showARControls() {
-        document.getElementById('ar-controls').classList.remove('opacity-0', 'pointer-events-none');
-    }
-
-    /** Oculta la galería y muestra el botón AR/canvas. */
-    function hideGalleryView() {
-        document.getElementById('gallery-screen').classList.add('opacity-0', 'pointer-events-none');
-        document.getElementById('ar-button-container').style.display = 'block';
-    }
-
-
-    // --- Three.js y WebXR Core ---
-
-    /** Inicializa la escena 3D, el renderer y la configuración XR. */
-    function initThree() {
-        const canvas = document.getElementById('ar-canvas');
-        
-        // Escena y Luces
-        scene = new THREE.Scene();
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
-        directionalLight.position.set(5, 10, 7.5);
-        scene.add(directionalLight);
-
-        // Cámara (Solo se usa antes de la sesión XR)
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // Renderer
-        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.outputEncoding = THREE.sRGBEncoding;
-
-        // Configuración XR
-        renderer.xr.enabled = true;
-
-        // Loader
-        textureLoader = new THREE.TextureLoader();
-
-        window.addEventListener('resize', onWindowResize);
-    }
-
-    /** Maneja el redimensionamiento de la ventana. */
-    function onWindowResize() {
-        if (!renderer.xr.isPresenting) {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-    }
-
-    /** Crea el retículo (indicador de superficie) */
-    function createReticle() {
-        const geometry = new THREE.RingGeometry(0.1, 0.12, 32).rotateX(-Math.PI / 2);
-        const material = new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.8, transparent: true });
-        reticle = new THREE.Mesh(geometry, material);
-        reticle.matrixAutoUpdate = false;
+    // run hit test
+    if(xrHitTestSource){
+      const hitResults = frame.getHitTestResults(xrHitTestSource);
+      if(hitResults.length > 0 && !placedRoot){
+        const hit = hitResults[0];
+        const hitPose = hit.getPose(xrRefSpace);
+        // position reticle
+        reticle.visible = true;
+        reticle.matrix.fromArray(hitPose.transform.matrix);
+      } else if(hitResults.length > 0 && placedRoot){
+        // hide reticle if already placed
         reticle.visible = false;
-        scene.add(reticle);
+      } else {
+        reticle.visible = false;
+      }
     }
 
-    /** Carga la obra 3D con su textura y la mantiene oculta inicialmente. */
-    function loadArtwork(artwork) {
-        currentArtwork = artwork;
-        selectedArtURL = artwork.url;
-
-        // Carga de textura
-        textureLoader.load(selectedArtURL,
-            (texture) => {
-                // Ajustar el aspecto del plano a la imagen
-                const aspectRatio = texture.image.width / texture.image.height;
-                const height = 1.0; // Altura base del cuadro en el mundo 3D (1 metro)
-                const width = height * aspectRatio;
-
-                // 1. Crear la Malla del Arte (el cuadro en sí)
-                const artGeometry = new THREE.PlaneGeometry(width, height);
-                const artMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-                const artMesh = new THREE.Mesh(artGeometry, artMaterial);
-                artMesh.position.z = 0.025; 
-
-                // 2. Crear el Marco (BoxGeometry)
-                const frameThickness = 0.05;
-                const frameGeometry = new THREE.BoxGeometry(
-                    width + frameThickness * 2,
-                    height + frameThickness * 2,
-                    frameThickness
-                );
-                const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.2 });
-                const frameMesh = new THREE.Mesh(frameGeometry, frameMaterial);
-
-                // 3. Crear el Objeto Contenedor
-                if (artObject) scene.remove(artObject);
-                artObject = new THREE.Group();
-                artObject.add(frameMesh);
-                artObject.add(artMesh);
-                
-                // Lo ocultamos hasta que sea colocado en AR
-                artObject.visible = false; 
-
-                showMessage(`Obra "${artwork.name}" cargada. Pulsa ENTER AR.`);
-                hideGalleryView();
-            },
-            undefined,
-            (err) => {
-                console.error('Error al cargar la textura de la obra:', err);
-                showMessage('Error al cargar la obra. Inténtalo de nuevo.', 5000);
-            }
-        );
-    }
-
-    /** La función de renderizado para WebXR. */
-    function render(timestamp, frame) {
-        if (frame) {
-            const referenceSpace = renderer.xr.getReferenceSpace();
-            const session = renderer.xr.getSession();
-
-            // Hit Testing y Retículo (Solo si la obra no ha sido colocada)
-            if (hitTestSource && reticle && !artPlaced) {
-                const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-                if (hitTestResults.length) {
-                    const hit = hitTestResults[0];
-                    const pose = hit.getPose(referenceSpace);
-                    
-                    reticle.matrix.fromArray(pose.transform.matrix);
-                    reticle.visible = true;
-
-                } else {
-                    reticle.visible = false;
-                }
-            }
+    // If we have an anchor with tracking, update placedRoot using anchor's pose if available:
+    if(placedRoot && placedAnchor && frame.getPose){
+      // try to get anchor pose (anchors API might provide anchor.anchorSpace)
+      try{
+        const anchorPose = frame.getPose(placedAnchor.anchorSpace || placedAnchor, xrRefSpace);
+        if(anchorPose){
+          placedRoot.matrix.fromArray(anchorPose.transform.matrix);
+          placedRoot.matrix.decompose(placedRoot.position, placedRoot.quaternion, placedRoot.scale);
         }
-        renderer.render(scene, camera);
+      }catch(e){ /* ignore if not available */ }
     }
 
-    /** Maneja la colocación del objeto en el primer toque. */
-    function handleSelect(event) {
-        if (!artObject) return;
+    renderer.render(scene, camera);
+  }
 
-        if (!artPlaced && reticle.visible) {
-            // Colocar el objeto en la posición del retículo
-            artObject.position.setFromMatrixPosition(reticle.matrix);
-            artObject.scale.set(1, 1, 1);
-            artObject.visible = true;
-            scene.add(artObject);
-            artPlaced = true;
-            reticle.visible = false;
+  /************************** Place artwork and anchors **************************/
+  // Called when user taps/selects while reticle visible. We create a placedRoot and attempt to create an XRAnchor.
+  async function placeArtworkAtReticle(frame){
+    if(!reticle.visible) return;
+    // create placedRoot at reticle matrix
+    placedRoot = new THREE.Group();
+    placedRoot.matrixAutoUpdate = false;
+    placedRoot.matrix.copy(reticle.matrix);
+    placedRoot.matrix.decompose(placedRoot.position, placedRoot.quaternion, placedRoot.scale);
 
-            // Ocultar el botón AR y mostrar los controles de interacción
-            document.getElementById('ar-button-container').style.display = 'none';
-            showARControls();
-            showMessage(`Obra colocada. Usa los gestos para manipularla.`, 3000);
+    // Create the artwork model from current selection
+    tempModel = buildArtwork(currentTextureURL);
+    // center the art so it faces camera: rotate to lay flat against plane's normal
+    // reticle is aligned with surface normal, so we just add model
+    placedRoot.add(tempModel);
+    scene.add(placedRoot);
 
-            // Dejar de buscar superficies (hitTestSource)
-            if (hitTestSource) {
-                hitTestSource.cancel();
-                hitTestSource = null;
-            }
-
-        } else if (artPlaced) {
-            // Manejar interacción post-colocación (movimiento/rotación/escala)
-            // Para WebXR, el manejo de gestos sigue siendo en la pantalla (como en el modo anterior)
-            // pero el objeto ya está anclado en el mundo 3D.
-            // Para simplificar, la interacción sigue la lógica táctil del 'handleTouchMove'.
-            
-            // Aquí puedes añadir lógica de raycasting para mover el objeto a otra superficie si es necesario, 
-            // pero por ahora mantendremos el control táctil para manipular la escala/rotación/posición
-            // dentro del mismo anclaje, cumpliendo con el requisito de interacción.
+    // Try to create XRAnchor (if anchors supported)
+    try{
+      const session = renderer.xr.getSession();
+      if(session && session.requestAnchor){
+        // Many implementations use frame.createAnchor, but session.requestAnchor is also used
+        const frameOfRef = xrRefSpace;
+        // Use the last frame's hit test to get the transform - but here assume reticle matrix
+        const transform = new XRRigidTransform(); // identity
+        // Simpler approach: request anchor from reticle's pose using frame (if available)
+        // We'll attempt to use createAnchor via frame (works in some browsers)
+        const viewerPose = frame ? frame.getViewerPose(xrRefSpace) : null;
+        // Preferred: ask frame to create anchor from hit result - but we can't pass hit here, so skip
+        // Alternatively, use anchors via session.requestAnchor if available:
+        if(session.requestAnchor){
+          // Use matrix of reticle to build pose:
+          const m = reticle.matrix.elements;
+          const pose = new XRRigidTransform({
+            x: m[12], y: m[13], z: m[14]
+          }, {
+            x: 0, y: 0, z: 0, w: 1
+          }); // simple pose - orientation not exact but OK
+          // request anchor
+          try{
+            const anchor = await session.requestAnchor(pose, xrRefSpace);
+            placedAnchor = anchor;
+            // anchor.anchorSpace available in some implementations
+            console.log('Anchor created', anchor);
+          }catch(e){ console.warn('requestAnchor failed', e); placedAnchor = null; }
         }
+      }
+    }catch(e){
+      console.warn('anchor creation failed', e);
+      placedAnchor = null;
     }
 
-    // --- Interacciones Táctiles (Gestos) ---
+    // Hide reticle and hint after placement
+    reticle.visible = false;
+    placementHint.style.display = 'none';
 
-    // Las interacciones ahora se aplican al objeto AR colocado
-    function handleTouchStart(event) {
-        if (!artObject || !artPlaced || event.touches.length === 0) return;
+    // Enable touch interactions on the renderer canvas for rotate/scale
+    enableTouchInteractions();
+  }
 
-        interaction.isDragging = true;
-        interaction.prevTouch.x = event.touches[0].clientX;
-        interaction.prevTouch.y = event.touches[0].clientY;
+  /************************ Touch interactions for placed object ************************/
+  function enableTouchInteractions(){
+    const canvas = renderer.domElement;
 
-        if (event.touches.length === 2) {
-            interaction.prevDistance = getDistance(event.touches[0], event.touches[1]);
-        }
+    canvas.addEventListener('touchstart', onTouchStart, {passive:false});
+    canvas.addEventListener('touchmove', onTouchMove, {passive:false});
+    canvas.addEventListener('touchend', onTouchEnd, {passive:false});
+  }
+  function onTouchStart(e){
+    if(!placedRoot) return;
+    // track touches
+    ongoingTouches = [];
+    for(const t of e.touches) ongoingTouches.push(copyTouch(t));
+    e.preventDefault();
+  }
+  function onTouchMove(e){
+    if(!placedRoot) return;
+    e.preventDefault();
+    // single finger -> rotate around Y
+    if(e.touches.length === 1 && ongoingTouches.length === 1){
+      const t = e.touches[0];
+      const prev = ongoingTouches[0];
+      const dx = t.clientX - prev.x;
+      const rotY = dx * 0.005; // sensitivity
+      placedRoot.rotation.y -= rotY;
+      // update tracked touch
+      updateTouch(ongoingTouches[0].id, t.clientX, t.clientY);
+    }
+    // two fingers -> pinch to scale
+    else if(e.touches.length === 2){
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const prev0 = getTouchById(ongoingTouches[0].id) || copyTouch(e.touches[0]);
+      const prev1 = getTouchById(ongoingTouches[1].id) || copyTouch(e.touches[1]);
+
+      const prevDist = Math.hypot(prev1.x - prev0.x, prev1.y - prev0.y);
+      const newDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      const scaleFactor = newDist / prevDist;
+      // clamp scale
+      const newScale = THREE.MathUtils.clamp(placedRoot.scale.x * scaleFactor, 0.2, 6);
+      placedRoot.scale.setScalar(newScale);
+
+      // update tracked touches positions
+      updateTouch(ongoingTouches[0].id, t0.clientX, t0.clientY);
+      updateTouch(ongoingTouches[1].id, t1.clientX, t1.clientY);
+    }
+  }
+  function onTouchEnd(e){
+    // update ongoing touches
+    if(e.changedTouches){
+      for(const t of e.changedTouches) removeTouch(t.identifier);
+    }
+    if(e.touches.length === 0) ongoingTouches = [];
+  }
+
+  /************************** Simulated AR fallback **************************/
+  async function startSimulatedAR(){
+    // try to start camera feed as background
+    try{
+      simCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio:false });
+      cameraFeed.srcObject = simCameraStream;
+      cameraFeed.style.display = 'block';
+    }catch(e){
+      console.warn('Camera fallback failed', e);
+      alert('Camera access required for simulated AR fallback.');
+      return;
     }
 
-    function handleTouchMove(event) {
-        if (!artObject || !artPlaced || !interaction.isDragging) return;
+    // Activate DeviceOrientation controls for camera movement feel
+    deviceControls = new DeviceOrientationControls(camera);
+    deviceControls.connect();
 
-        // Escala (Pinch/Zoom)
-        if (event.touches.length === 2 && interaction.mode === 'scale') {
-            const currentDistance = getDistance(event.touches[0], event.touches[1]);
-            const deltaDistance = currentDistance - interaction.prevDistance;
+    // place reticle at center (we will use screenToWorld conversion)
+    reticle.visible = true;
+    placementHint.style.display = 'block';
+    simActive = true;
 
-            const scaleFactor = 0.005;
-            const newScale = artObject.scale.x + deltaDistance * scaleFactor;
+    // start render loop
+    renderer.setAnimationLoop(simulateFrame);
+  }
 
-            const clampedScale = Math.min(Math.max(0.1, newScale), 5.0);
-            artObject.scale.set(clampedScale, clampedScale, clampedScale);
+  function simulateFrame(){
+    // simple reticle behavior: keep reticle 2m in front of camera
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const pos = new THREE.Vector3().copy(camera.position).add(dir.multiplyScalar(2.0));
+    reticle.position.copy(pos);
+    reticle.quaternion.copy(camera.quaternion);
+    reticle.updateMatrix();
 
-            interaction.prevDistance = currentDistance;
-            showMessage(`Escala: ${clampedScale.toFixed(1)}x`, 1000);
+    renderer.render(scene,camera);
+  }
 
-        }
-        // Movimiento o Rotación (1 dedo)
-        else if (event.touches.length === 1) {
-            const dx = event.touches[0].clientX - interaction.prevTouch.x;
-            const dy = event.touches[0].clientY - interaction.prevTouch.y;
-
-            if (interaction.mode === 'move') {
-                // Mover en el plano horizontal (X, Z) y vertical (Y)
-                const moveSpeed = 0.002;
-                
-                // Mover en X y Y (ejes del mundo)
-                artObject.position.x += dx * moveSpeed;
-                artObject.position.y -= dy * moveSpeed; // Mover hacia arriba/abajo
-
-                showMessage('Moviendo Obra (X, Y)', 1000);
-            } else if (interaction.mode === 'rotate') {
-                // Rotar (eje Y del mundo)
-                const rotateSpeed = 0.01;
-                artObject.rotation.y += dx * rotateSpeed;
-                showMessage('Rotando Obra (Y-axis)', 1000);
-            }
-
-            interaction.prevTouch.x = event.touches[0].clientX;
-            interaction.prevTouch.y = event.touches[0].clientY;
-        }
+  function stopSimulatedAR(){
+    if(simCameraStream){
+      simCameraStream.getTracks().forEach(t=>t.stop());
+      cameraFeed.srcObject = null;
+      cameraFeed.style.display = 'none';
     }
+    if(deviceControls) deviceControls.dispose();
+    simActive = false;
+    renderer.setAnimationLoop(null);
+    reticle.visible = false;
+    placementHint.style.display = 'none';
+  }
 
-    function handleTouchEnd(event) {
-        if (event.touches.length === 0) {
-            interaction.isDragging = false;
-        }
-        if (event.touches.length === 1) {
-            interaction.prevTouch.x = event.touches[0].clientX;
-            interaction.prevTouch.y = event.touches[0].clientY;
-        }
+  /************************** UI bindings **************************/
+  // Enter AR button using WebXR when available
+  enterARBtn.addEventListener('click', async () => {
+    // If already in XR, ignore
+    if(renderer.xr.isPresenting) return;
+    try{
+      await startXR();
+      // scene initial state for XR: if user hasn't created a model yet, create one but keep hidden
+      if(!tempModel) currentTextureURL = gallery.querySelector('.thumb.selected').dataset.src;
+      // renderer will run the XR loop
+    }catch(e){
+      console.error('startXR error', e);
+      alert('Failed to start AR session: ' + e.message);
     }
+  });
 
-    /** Calcula la distancia entre dos toques para escalado. */
-    function getDistance(touch1, touch2) {
-        const dx = touch1.clientX - touch2.clientX;
-        const dy = touch1.clientY - touch2.clientY;
-        return Math.sqrt(dx * dx + dy * dy);
+  // Simulated AR fallback
+  startSimBtn.addEventListener('click', ()=>{
+    if(simActive) { stopSimulatedAR(); startSimBtn.textContent='Simulate AR'; }
+    else { startSimulatedAR(); startSimBtn.textContent='Stop Simulation'; }
+  });
+
+  // Gallery selection change
+  gallery.addEventListener('click', (e)=>{
+    const t = e.target.closest('.thumb');
+    if(!t) return;
+    // mark selection
+    gallery.querySelectorAll('.thumb').forEach(i => i.classList.remove('selected'));
+    t.classList.add('selected');
+    currentTextureURL = t.dataset.src;
+    // if artwork placed already, update texture on the fly
+    if(tempModel){
+      // find plane child (plane is first child per buildArtwork)
+      const plane = tempModel.children.find(c => c.geometry && c.geometry.type === 'PlaneGeometry');
+      if(plane) {
+        const newTex = new THREE.TextureLoader().load(currentTextureURL);
+        newTex.encoding = THREE.sRGBEncoding;
+        plane.material.map = newTex;
+        plane.material.needsUpdate = true;
+      }
     }
+  });
 
+  /************************** Utility: Screen->World (for simulated) **************************/
+  function screenToWorld(x,y, distance=2){
+    // convert screen coords to NDC
+    const ndc = new THREE.Vector3((x/window.innerWidth)*2-1, -(y/window.innerHeight)*2+1, 0.5);
+    ndc.unproject(camera);
+    const dir = ndc.sub(camera.position).normalize();
+    return camera.position.clone().add(dir.multiplyScalar(distance));
+  }
 
-    // --- Inicialización de la Galería y UI ---
-
-    /** Genera las tarjetas de la galería a partir del array ARTWORKS. */
-    function generateGalleryCards() {
-        const galleryContainer = document.getElementById('art-gallery');
-        galleryContainer.innerHTML = ARTWORKS.map(art => `
-            <div id="card-${art.id}" data-art-id="${art.id}" class="gallery-card bg-gray-800 rounded-xl overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl">
-                <div class="h-64 flex items-center justify-center bg-gray-700">
-                    <img src="${art.url}" alt="${art.name}" class="h-full w-full object-cover p-4 opacity-70 transition duration-300 hover:opacity-100">
-                </div>
-                <div class="p-4">
-                    <h3 class="text-xl font-semibold text-white truncate">${art.name}</h3>
-                    <p class="text-sm text-gray-400">${art.artist}</p>
-                </div>
-            </div>
-        `).join('');
-
-        // Añadir listeners a las tarjetas
-        ARTWORKS.forEach(art => {
-            document.getElementById(`card-${art.id}`).addEventListener('click', () => {
-                const selectedArt = ARTWORKS.find(a => a.id === art.id);
-                if (selectedArt) {
-                    // Carga la obra (oculta) y prepara el modo AR
-                    loadArtwork(selectedArt);
-                }
-            });
-        });
+  // When user taps the screen in simulated mode, place the model at reticle location
+  renderer.domElement.addEventListener('touchend', (ev)=>{
+    // double-tap detection for placement in simulated mode
+    const now = performance.now();
+    if(simActive && now - (renderer.domElement._lastTap||0) < 300){
+      // place at reticle
+      placeSimulatedAtReticle();
+      renderer.domElement._lastTap = 0;
+    } else {
+      renderer.domElement._lastTap = now;
     }
+  });
 
-    /** Configura los listeners de los botones de control en modo AR. */
-    function setupARControls() {
-        document.getElementById('btn-back').addEventListener('click', showGalleryView);
-        document.getElementById('btn-capture').addEventListener('click', captureCanvas);
-
-        // Listeners para cambiar el modo de interacción
-        document.querySelectorAll('#ar-controls button').forEach(button => {
-            const mode = button.getAttribute('data-mode');
-            if (mode) {
-                button.addEventListener('click', () => {
-                    interaction.mode = mode;
-                    showMessage(`Modo cambiado a: ${mode.toUpperCase()}`, 1500);
-
-                    // Resaltar el botón activo
-                    document.querySelectorAll('#ar-controls button').forEach(b => b.classList.remove('ring-4', 'ring-offset-2', 'ring-opacity-50', 'ring-white'));
-                    button.classList.add('ring-4', 'ring-offset-2', 'ring-opacity-50', 'ring-white');
-                });
-            }
-        });
-
-        // Inicializar el botón de modo 'move' como activo
-        document.getElementById('btn-move').click();
+  function placeSimulatedAtReticle(){
+    if(!simActive) return;
+    if(placedRoot) {
+      // already placed — maybe show message
+      placementHint.style.display = 'none';
+      return;
     }
+    placedRoot = new THREE.Group();
+    // position at reticle position and orientation
+    placedRoot.position.copy(reticle.position);
+    placedRoot.quaternion.copy(reticle.quaternion);
+    // add model
+    tempModel = buildArtwork(currentTextureURL);
+    placedRoot.add(tempModel);
+    scene.add(placedRoot);
+    placementHint.style.display = 'none';
+    // allow touch interactions
+    enableTouchInteractions();
+  }
 
-    /** Configura el comportamiento al entrar y salir de la sesión XR. */
-    function setupXRSessionListeners() {
-        renderer.xr.addEventListener('sessionstart', () => {
-            showMessage("Modo AR activado. Mueve el teléfono para detectar una superficie.", 4000);
-            
-            // Crear el retículo y solicitar la fuente de hit-test
-            createReticle();
-            const session = renderer.xr.getSession();
+  /************************** Start initial scene (non-XR) **************************/
+  // set camera default position (so device orientation/OrbitControls has reference)
+  camera.position.set(0, 1.6, 3);
+  // Add a subtle ground to catch shadows (not visible when camera passthrough)
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0}));
+  ground.rotation.x = -Math.PI/2; ground.position.y = -1.2; ground.receiveShadow=true;
+  scene.add(ground);
 
-            session.requestReferenceSpace('viewer').then((viewerSpace) => {
-                session.requestHitTestSource({ space: viewerSpace }).then((source) => {
-                    hitTestSource = source;
-                });
-            });
+  // keep a small animation loop so the scene shows before XR starts
+  renderer.setAnimationLoop(()=> {
+    renderer.render(scene,camera);
+  });
 
-            // Oculta la galería y muestra el canvas
-            document.getElementById('gallery-screen').classList.add('opacity-0', 'pointer-events-none');
-            document.getElementById('ar-button-container').style.display = 'none';
-        });
+  /************************** Notes for tester **************************/
+  // 1) To test WebXR on Android: use Chrome for Android + ARCore-supporting phone.
+  // 2) Host this page on HTTPS (GitHub Pages / Vercel / Netlify). WebXR requires secure context.
+  // 3) If device doesn't support WebXR immersive-ar, click "Simulate AR" and use double-tap to place.
+  // 4) After placement: drag one finger to rotate, pinch to scale. Change artwork via gallery.
+  // 5) Anchors support is attempted but browser support varies; the app falls back to keeping the placed object in scene.
+  //
+  // Implementation details are commented inside the code blocks above.
 
-        renderer.xr.addEventListener('sessionend', () => {
-            showMessage("Saliendo del modo AR.", 2000);
-            // Vuelve a la vista de galería
-            showGalleryView();
-            document.getElementById('ar-button-container').style.display = 'block';
-        });
-    }
-
-    /** Captura el canvas de Three.js. (Nota: La captura de fondo AR nativo no es posible directamente sin APIs especializadas). */
-    function captureCanvas() {
-        if (!renderer || !artObject || !artPlaced) {
-            showMessage("Debes estar en modo AR y haber colocado la obra para capturar.", 3000);
-            return;
-        }
-
-        const canvas = document.getElementById('ar-canvas');
-        
-        // Crear el enlace de descarga (solo captura el canvas 3D sobre el fondo de cámara nativo AR)
-        const link = document.createElement('a');
-        link.download = `artAR_capture_${currentArtwork.id || 'image'}_${Date.now()}.png`;
-        
-        // Usar toDataURL del canvas (solo capturará el objeto 3D si el fondo es transparente)
-        // Para captura real de AR incluyendo el fondo de cámara, el usuario debe usar la captura de pantalla nativa del dispositivo.
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-
-        showMessage('Captura del objeto 3D guardada. Usa la captura de pantalla nativa para incluir el fondo AR.', 5000);
-    }
-
-    /** Función principal de inicialización de la aplicación. */
-    window.onload = function() {
-        initThree();
-        setupXRSessionListeners();
-        generateGalleryCards();
-        setupARControls();
-
-        // Configurar el Botón AR (usando Three.js ARButton)
-        arButton = ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] });
-        document.getElementById('ar-button-container').appendChild(arButton);
-        document.getElementById('ar-button-container').style.display = 'none';
-
-
-        // Establecer el loop de animación a la función 'render' para WebXR
-        renderer.setAnimationLoop(render);
-
-        // Configurar Eventos Táctiles en el Canvas para la colocación (un toque)
-        const canvas = document.getElementById('ar-canvas');
-        canvas.addEventListener('click', handleSelect, false); // Tap para colocar
-
-        // Configurar gestos de interacción (move/rotate/scale)
-        canvas.addEventListener('touchstart', handleTouchStart, false);
-        canvas.addEventListener('touchmove', handleTouchMove, false);
-        canvas.addEventListener('touchend', handleTouchEnd, false);
-
-        // Mostrar la galería al inicio
-        showGalleryView();
-    };
-</script>
-
+  </script>
 </body>
 </html>
