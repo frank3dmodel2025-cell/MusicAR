@@ -1,105 +1,125 @@
 <!-- 
-  WebAR Image Tracking con AR.js y A-Frame
+  WebAR Image Tracking con AR.js y A-Frame (Sin Marcador Tradicional)
   
-  Este ejemplo utiliza AR.js para el rastreo de una imagen específica (Trigger Image) 
-  y A-Frame para renderizar un objeto 3D (una caja que rota) sobre esa imagen 
-  cuando es detectada por la cámara.
+  Este ejemplo utiliza AR.js para el rastreo de una imagen compleja (Trigger Image - NFT) 
+  y A-Frame para renderizar un objeto 3D sobre esa imagen cuando es detectada por la cámara.
+  
+  NFT (Natural Feature Tracking) permite usar cualquier imagen impresa como disparador.
 -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebAR - Rastreo de Imagen</title>
+    <title>WebAR - Rastreo de Imagen Natural</title>
     <!-- Carga de la librería A-Frame (para 3D) -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <!-- Carga de la librería AR.js (para Realidad Aumentada) -->
+    <!-- Carga de la librería AR.js (para Realidad Aumentada - NFT) -->
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.0/aframe/build/aframe-ar-nft.js"></script>
+    
+    <!-- Componente para cargar el modelo 3D de glTF (Platillo Volador) -->
+    <script>
+        // Este es un componente A-Frame simple para añadir animación de rotación
+        AFRAME.registerComponent('rotacion-animada', {
+            tick: function () {
+                this.el.object3D.rotation.y += 0.01;
+            }
+        });
+    </script>
 
     <style>
-        /* Estilos básicos para asegurar que la escena de A-Frame ocupe toda la pantalla */
-        body { margin: 0; overflow: hidden; }
+        /* Estilos Tailwind CSS simulados para estética moderna */
         .info-box {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
-            padding: 10px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            font-family: sans-serif;
-            font-size: 14px;
+            padding: 15px;
+            background-color: #2c3e50; /* Azul oscuro */
+            color: #ecf0f1; /* Blanco suave */
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
             text-align: center;
             z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 0 0 10px 10px;
         }
+        .info-box a {
+            color: #3498db; /* Azul brillante */
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            font-size: 1.2em;
+            color: #f1c40f; /* Amarillo */
+        }
+        body { margin: 0; overflow: hidden; background-color: #f4f4f4; }
     </style>
 </head>
 <body>
 
     <!-- 
-      Contenedor de información para el usuario 
-      IMPORTANTE: La URL de la imagen de rastreo debe imprimirse o mostrarse en otra pantalla.
+      Contenedor de información para el usuario
+      La URL de la imagen de rastreo. Hemos cambiado la imagen a una de prueba oficial de AR.js NFT.
     -->
     <div class="info-box">
-        <h3>Instrucciones de WebAR (Simulación Artivive)</h3>
+        <h3>🚀 WebAR: Simulación Artivive (Rastreo Sin Marcador)</h3>
         <p>1. Permite el acceso a la cámara.</p>
         <p>2. Abre esta imagen en otro dispositivo o imprímela:</p>
-        <p><a href="https://i.ibb.co/68v8z7y/trigger-image.png" target="_blank" style="color: yellow;">IMAGEN DE DISPARO AQUÍ</a></p>
-        <p>3. Apunta la cámara de este dispositivo a la imagen para ver el cubo.</p>
-        <p>4. Mueve tu dispositivo para ver cómo el cubo se mantiene fijo en la imagen.</p>
+        <p><a href="https://raw.githubusercontent.com/AR-js-org/AR.js/master/aframe/examples/image-tracking/nft/artworks/artworks.jpg" target="_blank">IMAGEN DE DISPARO (Pintura Abstracta)</a></p>
+        <p>3. Apunta la cámara de este dispositivo a la imagen para ver el OVNI.</p>
     </div>
 
     <!-- 
       a-scene: Define la escena de Realidad Aumentada.
-      embedded: Indica que la escena debe estar dentro del HTML.
-      arjs: Configuración de AR.js
-          - source: pattern: indica que la fuente es la cámara (por defecto).
-          - trackingMethod: best (usa los mejores métodos de rastreo disponibles).
-          - sourceType: webcam (usa la cámara del dispositivo).
-          - debug: false (no muestra información de depuración).
-          - initializationDelay: 0 (inicia inmediatamente).
-          - nft: Activa el rastreo de imágenes (NFT - Natural Feature Tracking) 
+      arjs: Configuración de AR.js para usar NFT (rastreo de imágenes naturales)
+          - nft: url(URL del archivo de datos de rastreo pre-procesados - el .fset y .iset)
     -->
     <a-scene 
         embedded 
-        arjs='sourceType: webcam; trackingMethod: best; debugUIEnabled: false; initializationDelay: 0; nft: url(https://arjs-cors-proxy.s3.eu-central-1.amazonaws.com/nft/artivive-trigger-image);'
+        arjs='sourceType: webcam; trackingMethod: best; debugUIEnabled: false; initializationDelay: 0; nft: url(https://arjs-cors-proxy.s3.eu-central-1.amazonaws.com/nft/artworks);'
     >
 
         <!-- 
-          a-nft: Este es el elemento clave de rastreo de imágenes.
-          type: nft indica rastreo de imágenes naturales.
-          url: Es la ubicación del archivo de rastreo (el .fset y .iset generado por AR.js a partir de la imagen).
-               NOTA: Para que funcione, necesitamos un proxy que cargue los archivos pre-procesados, 
-               como el que se usa aquí (un marcador de prueba de Artivive).
-          
-          IMPORTANTE: El contenido dentro de a-nft SOLO es visible cuando la imagen es detectada.
+          a-nft: El elemento clave que rastrea la imagen.
+          url: Apunta a los archivos de rastreo pre-procesados de la imagen de arte abstracto.
+          NOTA: El archivo de datos 'artworks' corresponde a la imagen 'artworks.jpg' referenciada arriba.
         -->
         <a-nft 
             type='nft' 
-            url='https://arjs-cors-proxy.s3.eu-central-1.amazonaws.com/nft/artivive-trigger-image'
+            url='https://arjs-cors-proxy.s3.eu-central-1.amazonaws.com/nft/artworks'
             smooth='true' 
             smoothTime='0.1' 
             smoothThreshold='5'
         >
-            <!-- Objeto 3D que aparecerá sobre la imagen rastreada -->
-            <a-box 
-                position='0 0.5 0' 
-                scale='0.5 0.5 0.5' 
-                rotation='0 0 0' 
-                color='#F00' 
-                material='opacity: 0.8; metalness: 0.5;'
-                animation="property: rotation; to: 0 360 0; loop: true; dur: 3000; easing: linear"
+            <!-- Objeto 3D (Platillo Volador) que aparecerá sobre la imagen rastreada -->
+            <a-entity 
+                gltf-model="url(https://cdn.glitch.com/a4d79a29-e85c-4389-91b5-85c1c8f1925b%2Fflying-saucer.glb?v=1602187652750)" 
+                position='0 1.5 0' 
+                scale='3 3 3' 
+                rotacion-animada
             >
-                <!-- Texto superpuesto al cubo -->
-                <a-text 
-                    value="¡AR Activo!" 
-                    align="center" 
-                    width="2.5" 
-                    color="#FFF"
-                    position="0 0.6 0" 
-                    rotation="-90 0 0"
-                ></a-text>
-            </a-box>
+                <!-- Sombra para mejorar la inmersión -->
+                <a-plane 
+                    position="0 -0.5 0" 
+                    rotation="-90 0 0" 
+                    width="1" 
+                    height="1" 
+                    opacity="0.5" 
+                    color="#000"
+                ></a-plane>
+            </a-entity>
+
+            <!-- Texto descriptivo flotante -->
+            <a-text 
+                value="¡WebAR Sin Marcador!" 
+                align="center" 
+                width="2" 
+                color="#f1c40f"
+                position="0 2.5 0" 
+                rotation="-90 0 0"
+            ></a-text>
 
         </a-nft>
 
