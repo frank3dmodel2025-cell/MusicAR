@@ -3,28 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AR Web con WebXR y Three.js</title>
+<title>AR Web con WebXR</title>
 <style>
   body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
-  #ar-button {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 12px 20px;
-    background:#1f7fff;
-    color:#fff;
-    font-size:16px;
-    border:none;
-    border-radius:6px;
-    cursor:pointer;
-    z-index:10;
-  }
 </style>
 </head>
 <body>
-
-<button id="ar-button">Iniciar AR</button>
 
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js';
@@ -32,8 +16,7 @@ import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.153.0/examples/
 import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.153.0/examples/jsm/webxr/ARButton.js';
 
 let scene, camera, renderer;
-let controller;
-let reticle;
+let controller, reticle;
 let model = null;
 
 init();
@@ -49,54 +32,43 @@ function init(){
   renderer.xr.enabled = true;
   document.body.appendChild(renderer.domElement);
 
+  // AR Button
+  document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+
   // Luz
   const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
   scene.add(light);
 
-  // Cargar modelo GLTF
+  // Cargar modelo
   const loader = new GLTFLoader();
   loader.load(
     'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF-Binary/Duck.glb',
     (gltf) => {
       model = gltf.scene;
       model.scale.set(0.2,0.2,0.2);
-      model.visible = false; // oculto hasta colocarlo
+      model.visible = false;
       scene.add(model);
     }
   );
 
-  // Reticle (para colocar el modelo en el plano detectado)
-  const geometry = new THREE.RingGeometry(0.1, 0.12, 32).rotateX(-Math.PI/2);
+  // Reticle
+  const geometry = new THREE.RingGeometry(0.1,0.12,32).rotateX(-Math.PI/2);
   const material = new THREE.MeshBasicMaterial({color:0x00ff00});
   reticle = new THREE.Mesh(geometry, material);
   reticle.visible = false;
   scene.add(reticle);
 
-  // Controlador para tocar pantalla
   controller = renderer.xr.getController(0);
   controller.addEventListener('select', onSelect);
   scene.add(controller);
 
   window.addEventListener('resize', onWindowResize);
-
-  // Botón AR
-  const arButton = document.getElementById('ar-button');
-  arButton.addEventListener('click', () => {
-    document.body.appendChild(ARButton.createButton(renderer, {requiredFeatures:['hit-test']}));
-  });
 }
 
 function onWindowResize(){
-  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-let hitTestSource = null;
-let hitTestSourceRequested = false;
-
-function animate(){
-  renderer.setAnimationLoop(render);
 }
 
 function onSelect(){
@@ -106,14 +78,21 @@ function onSelect(){
   }
 }
 
+let hitTestSource = null;
+let hitTestSourceRequested = false;
+
+function animate(){
+  renderer.setAnimationLoop(render);
+}
+
 function render(timestamp, frame){
   if(frame){
     const referenceSpace = renderer.xr.getReferenceSpace();
     const session = renderer.xr.getSession();
 
-    if(hitTestSourceRequested === false){
+    if(!hitTestSourceRequested){
       session.requestReferenceSpace('viewer').then((refSpace)=>{
-        session.requestHitTestSource({space:refSpace}).then((source)=>{
+        session.requestHitTestSource({space: refSpace}).then((source)=>{
           hitTestSource = source;
         });
       });
@@ -136,7 +115,6 @@ function render(timestamp, frame){
       }
     }
   }
-
   renderer.render(scene, camera);
 }
 </script>
