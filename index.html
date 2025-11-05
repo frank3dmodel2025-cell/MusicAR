@@ -1,38 +1,128 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Web AR Demo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web AR de Coche 3D</title>
+    <!-- Script para importar el componente Model-viewer de Google -->
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <style>
+        /* Estilos generales para ocupar toda la pantalla */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+        }
 
-  <!-- Importar model-viewer -->
-  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-  <script nomodule src="https://unpkg.com/@google/model-viewer/dist/model-viewer-legacy.js"></script>
-  
-  <style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      width: 100%;
-    }
-    model-viewer {
-      width: 100%;
-      height: 100%;
-      --poster-color: #eeeeee;
-    }
-  </style>
+        /* El componente model-viewer ocupa la mayor parte de la ventana */
+        model-viewer {
+            width: 100vw;
+            height: 90vh; /* Usa 90vh para dejar espacio para el menú o el botón AR */
+            background-color: #e0f2f1; /* Un fondo suave para el visor 3D */
+            border: none;
+        }
+
+        /* Estilos para el botón AR personalizado */
+        #ar-button {
+            /* Positionamiento absoluto para colocarlo en la esquina inferior derecha */
+            position: absolute;
+            right: 35px;
+            bottom: 35px;
+            
+            /* Estilos de botón */
+            width: 150px;
+            height: 50px;
+            background-color: #00897b; /* Color verde azulado */
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            z-index: 10; /* Asegura que esté por encima del modelo */
+        }
+
+        #ar-button:hover {
+            background-color: #00695c;
+        }
+
+        #ar-button:active {
+            transform: scale(0.98);
+        }
+
+        /* Contenedor para el título y descripción */
+        .header-bar {
+            width: 100%;
+            height: 10vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .header-bar h1 {
+            font-size: 1.2rem;
+            color: #004d40;
+            margin: 0;
+        }
+
+        /* Media Query para móvil: ajustar la posición del botón */
+        @media (max-width: 600px) {
+            #ar-button {
+                right: 20px;
+                bottom: 20px;
+                width: 120px;
+                height: 45px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
 </head>
 <body>
-  <model-viewer 
-    src="https://tu-hosting.com/modelo.glb"
-    ios-src="https://tu-hosting.com/modelo.usdz"
-    alt="Demo AR model"
-    ar 
-    ar-modes="webxr scene-viewer quick-look"
-    camera-controls 
-    auto-rotate 
-    ar-scale="fixed">
-  </model-viewer>
+    <div class="header-bar">
+        <h1>Modelo 3D Interactivo (Listo para AR)</h1>
+    </div>
+
+    <!-- 
+        El componente model-viewer con atributos clave:
+        - src: Ruta al modelo GLB para visualización web/Android.
+        - ios-src: Ruta al modelo USDZ para Quick Look en iOS.
+        - ar: Habilita la funcionalidad de Realidad Aumentada.
+        - camera-controls: Permite al usuario rotar el modelo.
+        - touch-action: Indicación visual de que el modelo es interactivo.
+        - shadow-intensity: Añade una sombra para realismo.
+        - alt: Texto descriptivo para accesibilidad.
+    -->
+    <model-viewer 
+        src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+        ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
+        ar
+        camera-controls
+        touch-action="pan-y"
+        shadow-intensity="1"
+        alt="Un modelo 3D de un astronauta"
+        exposure="1.0"
+        shadow-softness="1">
+
+        <!-- Botón personalizado para iniciar la Realidad Aumentada -->
+        <button slot="ar-button" id="ar-button">
+            Iniciar AR
+        </button>
+
+    </model-viewer>
+
+    <!--
+        NOTA IMPORTANTE: 
+        El video original usa un modelo de coche, pero dado que no podemos subir archivos 3D directamente, 
+        estamos usando el modelo de 'Astronauta' de los ejemplos de Google como sustituto, el cual está 
+        disponible públicamente y funciona perfectamente con la función AR.
+        Para usar tu propio modelo, reemplaza las URLs de 'src' e 'ios-src' con las rutas a tus archivos GLB y USDZ.
+    -->
+
 </body>
 </html>
