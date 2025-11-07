@@ -3,182 +3,617 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modelo 3D Interactivo Estilo iOS</title>
-    <!-- Script para importar el componente Model-viewer de Google -->
-    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <title>Web AR de Coche 3D</title>
+    <!-- Script para importar el componente Model-viewer de Google --><script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <!-- Importar una fuente futurista de Google Fonts --><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* Tipografía moderna de sistema (simula San Francisco en iOS/macOS) y fondo blanco limpio */
+        /* Variables de color para fácil modificación */
+        :root {
+            --dark-bg: #1a1a1a;
+            --light-text: #e0e0e0;
+            --accent-blue: #00e6e6; /* Azul brillante similar al de la imagen */
+            --button-bg: #333;
+            --button-hover: #555;
+            --splash-bg: #0d0d0d; /* Fondo más oscuro para la splash */
+            --tutorial-card-bg: #2a2a2a; /* Fondo oscuro para el tutorial */
+        }
+
+        /* Estilos generales */
         body {
             margin: 0;
             padding: 0;
-            /* Fuentes de sistema para un look nativo iOS/Apple */
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-            background-color: #ffffff; 
-            color: #1c1c1e; 
-            overflow-x: hidden;
+            font-family: 'Orbitron', sans-serif; /* Fuente principal */
+            background-color: var(--dark-bg);
+            color: var(--light-text);
+            overflow: hidden;
         }
 
-        /* El componente model-viewer */
-        model-viewer {
+        /* --- Estilos de la Pantalla de Bienvenida (Splash Screen) --- */
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100vw;
-            height: calc(100vh - 55px); 
-            background-color: #f2f2f7; 
-            border: none;
-            display: block;
+            height: 100vh;
+            background-color: var(--splash-bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 1;
+            transition: opacity 1s ease-out;
         }
 
-        /* Contenedor para el título: Efecto de Barra Superior de iOS/Apple */
+        #splash-screen.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .logo {
+            width: 150px;
+            height: 150px;
+            background-color: var(--accent-blue); /* Logo con color de acento */
+            border-radius: 50%; /* Opcional: forma circular para el logo */
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem; /* Tamaño más grande para el logo */
+            font-weight: bold;
+            color: var(--splash-bg);
+            box-shadow: 0 0 20px rgba(0, 230, 230, 0.6); /* Sombra azul brillante */
+        }
+
+        .loading-text {
+            color: var(--light-text);
+            font-size: 1.2rem;
+            letter-spacing: 2px; /* Espaciado entre letras */
+        }
+
+        /* --- Estilos de la Interfaz Principal (Después del Splash) --- */
+        #main-content {
+            opacity: 0;
+            transition: opacity 0.5s ease-in;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #main-content.active {
+            opacity: 1;
+        }
+
+        /* El componente model-viewer ocupa la mayor parte de la ventana */
+        model-viewer {
+            width: 100%;
+            flex-grow: 1; /* Ocupa el espacio restante después del header y el carrusel */
+            background-color: #0d0d0d; /* Fondo muy oscuro para el visor, casi negro */
+            border: none;
+        }
+
+        /* Estilos para el botón AR inferior (superpuesto) */
+        #ar-button {
+            position: absolute;
+            right: 35px;
+            bottom: 120px; /* Subido para que no se superponga con el carrusel */
+            width: 150px;
+            height: 50px;
+            background-color: var(--accent-blue); /* Botón AR con color de acento */
+            color: var(--dark-bg); /* Texto oscuro en botón brillante */
+            border: none;
+            border-radius: 5px; /* Bordes más rectos */
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(0, 230, 230, 0.4); /* Sombra brillante */
+            transition: background-color 0.3s ease, transform 0.1s ease, box-shadow 0.3s ease;
+            z-index: 10;
+            letter-spacing: 1px;
+        }
+
+        #ar-button:hover {
+            background-color: #00ffff; /* Un poco más brillante al pasar el ratón */
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.7);
+        }
+
+        #ar-button:active {
+            transform: scale(0.98);
+        }
+
+        /* Contenedor para el título y descripción */
         .header-bar {
             width: 100%;
-            height: 55px; 
+            height: 10vh;
             display: flex;
-            justify-content: space-between; /* Distribuye elementos */
             align-items: center;
-            padding: 0 15px; /* Padding ajustado */
+            justify-content: space-between;
+            background-color: var(--dark-bg);
+            box-shadow: 0 2px 10px rgba(0, 230, 230, 0.1); /* Sombra sutil con acento */
+            z-index: 5;
+            padding: 0 20px;
             box-sizing: border-box;
-            background-color: rgba(255, 255, 255, 0.95); 
-            backdrop-filter: blur(10px); 
-            -webkit-backdrop-filter: blur(10px);
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            box-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.08); 
+            border-bottom: 1px solid var(--accent-blue); /* Línea inferior de acento */
         }
 
         .header-bar h1 {
-            font-size: 1.15rem; 
-            font-weight: 600; 
-            color: #1c1c1e;
+            font-size: 1.3rem; /* Título un poco más grande */
+            color: var(--light-text);
             margin: 0;
-            flex-grow: 1;
             text-align: center;
-            transition: font-size 0.3s;
-        }
-
-        /* Contenedor para alinear el botón AR a la derecha y el espacio izquierdo */
-        .header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-            max-width: 800px; /* Limita el ancho en pantallas muy grandes */
-            margin: 0 auto;
-        }
-
-        /* Espaciador para centrar el título */
-        .placeholder {
-            width: 80px; /* Igual al ancho del botón AR para centrar el título */
+            flex-grow: 1;
+            letter-spacing: 2px;
+            text-transform: uppercase; /* Todo en mayúsculas */
         }
         
-        /* --- Estilos para el botón AR en la barra superior (Estilo iOS) --- */
-        #ar-button-ui {
-            background: none;
+        /* Estilos del nuevo botón AR superior */
+        #top-ar-button {
+            background-color: var(--accent-blue); /* Color de acento */
+            color: var(--dark-bg); /* Texto oscuro */
             border: none;
-            color: #007aff; /* Azul de acento de iOS */
-            font-size: 1.0rem;
-            font-weight: 600; 
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: bold;
             cursor: pointer;
-            padding: 8px 10px;
-            border-radius: 8px;
-            transition: background-color 0.2s ease, opacity 0.2s;
-            /* Se asegura de que tenga un ancho fijo para centrar el título */
-            width: 80px; 
-            text-align: right; 
+            transition: background-color 0.3s, box-shadow 0.3s;
+            margin-right: 10px; /* Separación del botón de tutorial */
+            letter-spacing: 1px;
+            text-transform: uppercase;
         }
 
-        #ar-button-ui:hover {
-            background-color: #e5e5ea; /* Gris muy claro al pasar el ratón */
+        #top-ar-button:hover {
+            background-color: #00ffff;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
+        }
+
+        /* Estilos del botón de tutorial (mantenidos) */
+        #open-tutorial-btn {
+            background-color: transparent; /* Botón transparente */
+            color: var(--accent-blue); /* Texto del color de acento */
+            border: 1px solid var(--accent-blue); /* Borde con color de acento */
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
+            margin-left: 10px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        #open-tutorial-btn:hover {
+            background-color: var(--accent-blue);
+            color: var(--dark-bg);
+            box-shadow: 0 0 10px rgba(0, 230, 230, 0.6);
+        }
+
+        /* --- Estilos del Tutorial (Overlay) --- */
+        #tutorial-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85); /* Fondo más oscuro para el overlay */
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        #tutorial-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .tutorial-card {
+            background-color: var(--tutorial-card-bg); /* Fondo oscuro para la tarjeta */
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 450px; /* Un poco más grande */
+            box-shadow: 0 0 30px rgba(0, 230, 230, 0.3); /* Sombra azul brillante */
+            width: 90%;
+            border: 1px solid var(--accent-blue); /* Borde de acento */
+        }
+
+        .tutorial-card h2 {
+            color: var(--accent-blue); /* Título del tutorial en color de acento */
+            margin-top: 0;
+            font-size: 1.8rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        .tutorial-card p, .tutorial-card ul {
+            color: var(--light-text);
+            line-height: 1.6;
+            margin-bottom: 20px;
+            font-size: 1rem;
+            letter-spacing: 0.5px;
         }
         
-        /* Oculta el botón nativo de model-viewer, ya que usamos el nuestro en la UI */
-        model-viewer button[slot="ar-button"] {
-            display: none !important;
+        .tutorial-card ul {
+            text-align: left; /* Alinea los puntos de la lista a la izquierda */
+            padding-left: 20px;
+        }
+        .tutorial-card ul li {
+            margin-bottom: 8px;
+        }
+        .tutorial-card ul li strong {
+            color: var(--accent-blue); /* Destaca las palabras clave */
         }
 
-        /* Media Query para Móviles */
+        #skip-tutorial-btn {
+            background-color: var(--accent-blue); /* Botón de tutorial con color de acento */
+            color: var(--dark-bg);
+            border: none;
+            padding: 12px 30px; /* Botón un poco más grande */
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s, box-shadow 0.3s;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        #skip-tutorial-btn:hover {
+            background-color: #00ffff;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.6);
+        }
+        
+        /* --- Estilos del Carrusel Interactivo --- */
+        #model-carousel {
+            height: 100px; /* Altura fija para el carrusel */
+            width: 100%;
+            background-color: var(--dark-bg);
+            border-top: 1px solid var(--accent-blue);
+            box-shadow: 0 -2px 10px rgba(0, 230, 230, 0.1);
+            overflow-x: auto; /* Permite el desplazamiento horizontal */
+            overflow-y: hidden;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 20; /* Asegura que esté sobre el fondo del model-viewer */
+
+            /* Ocultar scrollbar */
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none;  /* IE and Edge */
+        }
+        #model-carousel::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
+        }
+        
+        .carousel-track {
+            display: flex;
+            gap: 15px; /* Espacio entre los ítems */
+            padding: 10px 0;
+            margin: auto; /* Centra el contenido del carrusel */
+            justify-content: center; /* Intenta centrar los elementos si caben */
+            min-width: max-content; /* Permite que el contenido se extienda */
+        }
+
+        .carousel-item {
+            flex-shrink: 0; /* Evita que los ítems se encojan */
+            width: 80px;
+            height: 80px;
+            border-radius: 8px;
+            background-color: var(--button-bg);
+            border: 2px solid var(--button-bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: var(--light-text);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+            line-height: 1.2;
+        }
+
+        .carousel-item:hover {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 10px rgba(0, 230, 230, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .carousel-item.active {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 15px rgba(0, 230, 230, 0.8);
+            background-color: #3f3f3f;
+            transform: scale(1.05);
+        }
+
+
+        /* Media Query para móvil: ajustar la posición del botón */
         @media (max-width: 600px) {
+            #ar-button {
+                right: 15px;
+                bottom: 95px; /* Ajuste para el carrusel de 80px + margen */
+                width: 100px;
+                height: 40px;
+                font-size: 0.8rem;
+                padding: 5px 10px;
+            }
+            /* Estilos de la barra superior en móvil */
             .header-bar {
-                height: 50px; 
+                padding: 0 10px;
+                flex-direction: column; 
+                height: auto;
+                padding-bottom: 5px;
+                text-align: center;
+            }
+            .header-bar h1 {
+                margin-top: 10px;
+                font-size: 1rem;
+                order: 0; /* Título arriba */
+            }
+            
+            /* Ajuste para los dos botones superiores en móvil */
+            #top-ar-button, #open-tutorial-btn {
+                margin: 5px 0 0 0;
+                width: calc(100% - 20px); /* Ocupa casi todo el ancho */
+                font-size: 0.9rem;
+            }
+
+            /* Usar orden para que el botón AR aparezca primero si se apilan */
+            #top-ar-button {
+                order: 1; 
+                margin-right: 0; /* Eliminar el margen derecho en móvil */
+            }
+            #open-tutorial-btn {
+                order: 2; 
+                margin-left: 0; /* Eliminar el margen izquierdo en móvil */
+            }
+
+            .logo {
+                width: 100px;
+                height: 100px;
+                font-size: 1.5rem;
+            }
+            .loading-text {
+                font-size: 1rem;
+            }
+            .tutorial-card h2 {
+                font-size: 1.5rem;
+            }
+            .tutorial-card p, .tutorial-card ul {
+                font-size: 0.9rem;
+            }
+            #skip-tutorial-btn {
+                padding: 10px 20px;
+            }
+            
+            #model-carousel {
+                height: 80px; /* Más pequeño en móvil */
                 padding: 0 10px;
             }
-
-            model-viewer {
-                height: calc(100vh - 50px);
-            }
-
-            .header-bar h1 {
-                font-size: 1.0rem; 
-            }
-            
-            #ar-button-ui {
-                width: 70px; /* Ajuste para móvil */
-                font-size: 0.95rem;
-            }
-            
-            .placeholder {
-                width: 70px;
+            .carousel-item {
+                width: 60px;
+                height: 60px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Barra superior fija con efecto cristal esmerilado -->
-    <div class="header-bar">
-        <div class="header-content">
-            <!-- Espaciador para centrar el título cuando el botón AR está a la derecha -->
-            <div class="placeholder"></div>
 
-            <h1>Modelo 3D Interactivo</h1>
-
-            <!-- Botón AR visible en la interfaz superior -->
-            <button id="ar-button-ui">
-                Ver en AR
-            </button>
+    <!-- 1. Pantalla de Bienvenida (Splash Screen) --><div id="splash-screen">
+        <div class="logo">
+            Z
+        </div>
+        <div class="loading-text">
+            INICIANDO EXPERIENCIA AR...
         </div>
     </div>
 
-    <!-- Visor del Modelo 3D -->
-    <model-viewer 
-        id="modelViewer"
-        src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-        ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
-        ar
-        camera-controls
-        touch-action="pan-y"
-        shadow-intensity="1"
-        alt="Un modelo 3D de un astronauta"
-        exposure="1.2"
-        shadow-softness="1">
+    <!-- 2. Contenido Principal de la Web AR --><div id="main-content">
+        <div class="header-bar">
+            <!-- Espacio vacío para balancear el layout si es necesario --><div style="width: 150px; height: 35px; visibility: hidden;"></div> 
+            <h1>VISUALIZADOR AR 3D</h1>
+            <!-- Nuevo Botón para iniciar AR desde el encabezado --><button id="top-ar-button">VER EN AR</button>
+            <!-- Botón para Iniciar Tutorial manualmente --><button id="open-tutorial-btn">INICIAR TUTORIAL</button>
+        </div>
 
-        <!-- Botón nativo oculto. Su único propósito es tener el slot="ar-button" requerido para que model-viewer active AR. -->
-        <button slot="ar-button" id="hidden-ar-button"></button>
+        <!-- Modelo 3D con Model-viewer, se establece la fuente inicial -->
+        <model-viewer 
+            id="model-3d"
+            src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+            ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
+            ar
+            camera-controls
+            touch-action="pan-y"
+            shadow-intensity="1"
+            alt="Un modelo 3D de un astronauta"
+            exposure="1.0"
+            shadow-softness="1">
 
-    </model-viewer>
+            <!-- Botón personalizado para iniciar la Realidad Aumentada (slot) -->
+            <!-- Este botón se gestiona automáticamente por model-viewer -->
+            <button slot="ar-button" id="ar-button">
+                VER EN AR
+            </button>
+
+        </model-viewer>
+        
+        <!-- 4. Carrusel Interactivo de Modelos -->
+        <div id="model-carousel">
+            <div class="carousel-track">
+                <!-- Modelo de Astronauta (Fuente inicial, estable) -->
+                <div class="carousel-item active" 
+                     data-src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+                     data-ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz">
+                    MODELO <br> 01
+                </div>
+                <!-- ENLACE CORREGIDO: Botella (glTF Sample Models) -->
+                <div class="carousel-item" 
+                     data-src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/WaterBottle/glTF/WaterBottle.gltf"
+                     data-ios-src="https://modelviewer.dev/shared-assets/models/WaterBottle.usdz">
+                    MODELO <br> 02
+                </div>
+                <!-- ENLACE CORREGIDO: Caja (glTF Sample Models) -->
+                <div class="carousel-item" 
+                     data-src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Box/glTF/Box.gltf"
+                     data-ios-src="https://modelviewer.dev/shared-assets/models/Box.usdz">
+                    MODELO <br> 03
+                </div>
+                <!-- ENLACE CORREGIDO: Radio (glTF Sample Models) -->
+                <div class="carousel-item" 
+                     data-src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/BoomBoxWithAxes/glTF/BoomBoxWithAxes.gltf"
+                     data-ios-src="https://modelviewer.dev/shared-assets/models/BoomBox.usdz">
+                    MODELO <br> 04
+                </div>
+                <!-- ENLACE CORREGIDO: Casco (glTF Sample Models) -->
+                <div class="carousel-item" 
+                     data-src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/SciFiHelmet/glTF/SciFiHelmet.gltf"
+                     data-ios-src="https://modelviewer.dev/shared-assets/models/SciFiHelmet.usdz">
+                    MODELO <br> 05
+                </div>
+                <!-- Modelo de Robot (Modelo estable de Google) -->
+                <div class="carousel-item" 
+                     data-src="https://modelviewer.dev/shared-assets/models/RobotExpressive.glb"
+                     data-ios-src="https://modelviewer.dev/shared-assets/models/RobotExpressive.usdz">
+                    MODELO <br> 06
+                </div>
+                <!-- Modelo de Planta (Modelo estable de Google) -->
+                <div class="carousel-item" 
+                     data-src="https://modelviewer.dev/shared-assets/models/retargeted_Plant.glb"
+                     data-ios-src="https://modelviewer.dev/shared-assets/models/retargeted_Plant.usdz">
+                    MODELO <br> 07
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Overlay del Tutorial --><div id="tutorial-overlay">
+            <div class="tutorial-card">
+                <h2>¡BIENVENIDO!</h2>
+                <p>INTERACTÚA CON TU MODELO 3D:</p>
+                <ul>
+                    <li>**GIRAR:** TOCA Y ARRASTRA CON UN DEDO.</li>
+                    <li>**ZOOM:** USA EL GESTO DE PINZA CON DOS DEDOS.</li>
+                    <li>**REALIDAD AUMENTADA:** PRESIONA **"VER EN AR"** PARA COLOCAR EL MODELO EN TU ENTORNO.</li>
+                </ul>
+                <button id="skip-tutorial-btn">CERRAR TUTORIAL</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const arButtonUI = document.getElementById('ar-button-ui');
-            const hiddenArButton = document.getElementById('hidden-ar-button');
-            const modelViewer = document.getElementById('modelViewer');
+        const SPLASH_DURATION_MS = 4000; // 4 segundos
+        const splashScreen = document.getElementById('splash-screen');
+        const mainContent = document.getElementById('main-content');
+        const tutorialOverlay = document.getElementById('tutorial-overlay');
+        const skipButton = document.getElementById('skip-tutorial-btn');
+        const openTutorialButton = document.getElementById('open-tutorial-btn');
+        const modelViewer = document.getElementById('model-3d');
+        const carouselItems = document.querySelectorAll('.carousel-item');
+        const topArButton = document.getElementById('top-ar-button'); // Nuevo botón AR superior
 
-            // 1. Detección de soporte AR
-            // El botón solo debe ser visible si el navegador/dispositivo soporta AR
-            if (modelViewer.hasAttribute('ar')) {
-                arButtonUI.style.display = 'block';
-            } else {
-                // Si no hay soporte AR, ocultamos el botón de la UI
-                arButtonUI.style.display = 'none';
+
+        // Función para ocultar la splash screen y mostrar el contenido principal
+        function showMainContent() {
+            // Oculta la splash screen
+            splashScreen.classList.add('fade-out');
+
+            // Después de que la transición termine (1s), lo oculta por completo y muestra el contenido
+            setTimeout(() => {
+                splashScreen.style.display = 'none';
+                mainContent.classList.add('active');
+                
+                // Mostrar el tutorial al cargar el contenido, ya que es el flujo inicial
+                showTutorial();
+            }, 1000); // 1s es la duración de la transición CSS
+        }
+        
+        // Función para mostrar el tutorial
+        function showTutorial() {
+            // Asegúrate de que el modelo no se pueda manipular mientras está el tutorial
+            if (modelViewer) {
+                modelViewer.removeAttribute('camera-controls');
             }
+            tutorialOverlay.classList.remove('hidden');
+        }
+
+        // Función para ocultar el tutorial y restaurar controles
+        function hideTutorial() {
+            tutorialOverlay.classList.add('hidden');
+            // Restaura el control de la cámara para que el usuario pueda interactuar
+            if (modelViewer) {
+                modelViewer.setAttribute('camera-controls', 'true');
+            }
+        }
+        
+        // Función para manejar la selección del carrusel
+        function selectModel(event) {
+            const selectedItem = event.currentTarget;
+            
+            // 1. Quitar 'active' de todos los items y añadirlo al seleccionado
+            carouselItems.forEach(item => item.classList.remove('active'));
+            selectedItem.classList.add('active');
+
+            // 2. Obtener las nuevas rutas del modelo
+            const newSrc = selectedItem.getAttribute('data-src');
+            const newIosSrc = selectedItem.getAttribute('data-ios-src');
+
+            // 3. Cargar el nuevo modelo en el visor
+            if (modelViewer && newSrc) {
+                // Se reinicia el visor para cargar el nuevo modelo
+                modelViewer.src = newSrc;
+                if (newIosSrc) {
+                    modelViewer.setAttribute('ios-src', newIosSrc);
+                } else {
+                    modelViewer.removeAttribute('ios-src');
+                }
+                
+                // Opcional: Reiniciar la vista de la cámara
+                modelViewer.cameraOrbit = "0deg 90deg auto";
+            }
+        }
 
 
-            // 2. Lógica de activación al hacer clic
-            arButtonUI.addEventListener('click', () => {
-                // Simulamos el clic en el botón nativo oculto para activar la funcionalidad AR.
-                if (hiddenArButton) {
-                    hiddenArButton.click();
+        // 1. Lógica de la Splash Screen
+        window.onload = () => {
+            // Ejecuta la función principal después del tiempo de duración
+            setTimeout(showMainContent, SPLASH_DURATION_MS);
+        };
+
+        // 2. Lógica de los botones del Tutorial
+        skipButton.addEventListener('click', hideTutorial);
+        openTutorialButton.addEventListener('click', showTutorial);
+        
+        // 3. Lógica de los items del Carrusel
+        carouselItems.forEach(item => {
+            item.addEventListener('click', selectModel);
+        });
+
+        // 4. Lógica del botón AR superior
+        if (topArButton) {
+            topArButton.addEventListener('click', () => {
+                // Verificar si AR está disponible y no se está presentando ya
+                if (modelViewer.canActivateAR && modelViewer.arStatus === 'not-presenting') {
+                    modelViewer.activateAR();
+                } else if (modelViewer.arStatus === 'not-presenting') {
+                    // Si AR no está disponible (por ejemplo, en PC), se podría dar un feedback
+                    console.warn("La Realidad Aumentada no está disponible en este dispositivo.");
                 }
             });
-        });
+        }
+
     </script>
-</body>
+
+    <!--
+        NOTA IMPORTANTE: 
+        Los modelos 3D usados son ejemplos públicos. Para usar tus propios modelos, 
+        debes actualizar los atributos 'data-src' y 'data-ios-src' en cada '.carousel-item'
+        con las rutas a tus archivos GLB y USDZ correspondientes.
+    --></body>
 </html>
