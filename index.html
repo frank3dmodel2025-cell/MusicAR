@@ -6,6 +6,14 @@
     <title>Web AR de Coche 3D</title>
     <!-- Script para importar el componente Model-viewer de Google --><script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
     <!-- Importar una fuente futurista de Google Fonts --><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- METATAGS AÑADIDOS PARA SIMULAR MODO APP / PWA -->
+    <!-- Indica a iOS y Android que muestren la página en modo pantalla completa sin la interfaz del navegador. -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <!-- Define el color de la barra de estado de iOS para que se adapte al diseño oscuro. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <style>
         /* Variables de color para fácil modificación */
         :root {
@@ -420,7 +428,7 @@
         <div class="header-bar">
             <!-- Espacio vacío para balancear el layout si es necesario --><div style="width: 150px; height: 35px; visibility: hidden;"></div> 
             <h1>VISUALIZADOR AR 3D</h1>
-            <!-- Nuevo Botón para iniciar AR desde el encabezado --><button id="top-ar-button">VER EN AR</button>
+            <!-- Botón para iniciar AR desde el encabezado --><button id="top-ar-button">VER EN AR</button>
             <!-- Botón para Iniciar Tutorial manualmente --><button id="open-tutorial-btn">INICIAR TUTORIAL</button>
         </div>
 
